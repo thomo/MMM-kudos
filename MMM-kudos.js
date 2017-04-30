@@ -17,7 +17,7 @@ Module.register("MMM-kudos", {
 			23: "night",
 		},
 		shrinkLimit: 35,
-		compliments: {
+		kudos: {
 			anytime: [
 				"Und jetzt einen Kaffee!",
 				"Dem Kühnen lächeln die Götter zu!",
@@ -47,7 +47,7 @@ Module.register("MMM-kudos", {
 				"Was für ein Tag ...",
 				"Es ist ein Genuß dich zu sehen!",
 				"Wie war dein Tag?",
-				"Meine Augen befinden sich bereits im Zustand seliger Vorfreude!",
+				"Meine Augen befinden sich bereits im Zustand seeliger Vorfreude!",
 			],
 			night: [
 				"Noch nicht müde?",
@@ -73,11 +73,11 @@ Module.register("MMM-kudos", {
 	start: function() {
 		Log.info("Starting module: " + this.name);
 
-		this.lastComplimentIndex = -1;
+		this.lastKudoIndex = -1;
 
 		if (this.config.remoteFile != null) {
-			this.complimentFile((response) => {
-				this.config.compliments = JSON.parse(response);
+			this.kudoFile((response) => {
+				this.config.kudos = JSON.parse(response);
 			});
 		}
 
@@ -91,31 +91,32 @@ Module.register("MMM-kudos", {
 		}, this.config.updateInterval);
 	},
 
-	/* randomIndex(compliments)
-	 * Generate a random index for a list of compliments.
+	/* randomIndex(kudos)
+	 * Generate a random index for a list of kudos.
 	 *
-	 * argument compliments Array<String> - Array with compliments.
+	 * argument kudos Array<String> - Array with kudos.
 	 *
 	 * return Number - Random index.
 	 */
-	randomIndex: function(compliments) {
-		if (compliments.length === 1) {
+	randomIndex: function(kudos) {
+		if (kudos.length === 1) {
 			return 0;
 		}
+		Log.info(kudos.length);
 
 		var generate = function() {
-			return Math.floor(Math.random() * compliments.length);
+			return Math.floor(Math.random() * kudos.length);
 		};
 
-		var complimentIndex = generate();
+		var kudoIndex = generate();
 
-		while (complimentIndex === this.lastComplimentIndex) {
-			complimentIndex = generate();
+		while (kudoIndex === this.lastKudoIndex) {
+			kudoIndex = generate();
 		}
 
-		this.lastComplimentIndex = complimentIndex;
+		this.lastKudoIndex = kudoIndex;
 
-		return complimentIndex;
+		return kudoIndex;
 	},
 
   hourKey: function(hour) {
@@ -126,35 +127,30 @@ Module.register("MMM-kudos", {
 		return hour;
 	},
 
-	/* complimentArray()
-	 * Retrieve an array of compliments for the time of the day.
+	/* kudoArray()
+	 * Retrieve an array of kudos for the time of the day.
 	 *
-	 * return compliments Array<String> - Array with compliments for the time of the day.
+	 * return kudos Array<String> - Array with kudos for the time of the day.
 	 */
-	complimentArray: function() {
+	kudoArray: function() {
 		var hour = moment().hour();
-		var compliments = null;
+		var kudos = new Array();
 
 		var hourkey =  this.hourKey(hour);
 
 		if (hourkey > -1) {
-			compliments = this.config.compliments[this.config.hourmap[hourkey]];
+			kudos.push.apply(kudos, this.config.kudos[this.config.hourmap[hourkey]]);
 		}
 
-		if (typeof compliments === "undefined") {
-			compliments = new Array();
-		}
+		kudos.push.apply(kudos, this.config.kudos.anytime);
 
-		compliments.push.apply(compliments, this.config.compliments.anytime);
-
-		return compliments;
-
+		return kudos;
 	},
 
-	/* complimentFile(callback)
+	/* kudoFile(callback)
 	 * Retrieve a file from the local filesystem
 	 */
-	complimentFile: function(callback) {
+	kudoFile: function(callback) {
 		var xobj = new XMLHttpRequest();
 		xobj.overrideMimeType("application/json");
 		xobj.open("GET", this.file(this.config.remoteFile), true);
@@ -166,30 +162,30 @@ Module.register("MMM-kudos", {
 		xobj.send(null);
 	},
 
-	/* complimentArray()
-	 * Retrieve a random compliment.
+	/* kudoArray()
+	 * Retrieve a random kudo.
 	 *
-	 * return compliment string - A compliment.
+	 * return kudo string - A kudo.
 	 */
-	randomCompliment: function() {
-		var compliments = this.complimentArray();
-		var index = this.randomIndex(compliments);
+	randomKudo: function() {
+		var kudos = this.kudoArray();
+		var index = this.randomIndex(kudos);
 
-		return compliments[index];
+		return kudos[index];
 	},
 
 	// Override dom generator.
 	getDom: function() {
-		var complimentText = this.randomCompliment();
+		var kudoText = this.randomKudo();
 
-		var compliment = document.createTextNode(complimentText);
+		var kudo = document.createTextNode(kudoText);
 		var wrapper = document.createElement("div");
-		if (compliment.length < this.config.shrinkLimit) {
+		if (kudo.length < this.config.shrinkLimit) {
 			wrapper.className = this.config.classes ? this.config.classes : "thin xlarge bright";
 		} else {
 			wrapper.className = this.config.shrinkClasses ? this.config.shrinkClasses : "light medium bright";
 		}
-		wrapper.appendChild(compliment);
+		wrapper.appendChild(kudo);
 
 		return wrapper;
 	},
