@@ -102,7 +102,6 @@ Module.register("MMM-kudos", {
 		if (kudos.length === 1) {
 			return 0;
 		}
-		Log.info(kudos.length);
 
 		var generate = function() {
 			return Math.floor(Math.random() * kudos.length);
