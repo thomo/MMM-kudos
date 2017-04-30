@@ -10,8 +10,7 @@
 Module.register("MMM-kudos", {
 	defaults: {
 		hourmap: {
-			0: "night",
-			5: "morning",
+			 5: "morning",
 			11: "lunch",
 			15: "afternoon",
 			19: "evening",
@@ -82,6 +81,9 @@ Module.register("MMM-kudos", {
 			});
 		}
 
+		// set subset at begin of day to same as end of day
+		this.config.hourmap[0] = this.config.hourmap[0] ? this.config.hourmap[0] : this.config.hourmap[this.hourKey(24)]
+
 		// Schedule update timer.
 		var self = this;
 		setInterval(function() {
@@ -116,6 +118,14 @@ Module.register("MMM-kudos", {
 		return complimentIndex;
 	},
 
+  hourKey: function(hour) {
+		while (!(hour in this.config.hourmap) || hour < 0){
+			hour = hour - 1;
+		}
+
+		return hour;
+	},
+
 	/* complimentArray()
 	 * Retrieve an array of compliments for the time of the day.
 	 *
@@ -125,10 +135,7 @@ Module.register("MMM-kudos", {
 		var hour = moment().hour();
 		var compliments = null;
 
-		var hourkey =  hour
-		while (!(hourkey in this.config.hourmap) || hourkey < 0){
-			hourkey = hourkey - 1;
-		}
+		var hourkey =  this.hourKey(hour);
 
 		if (hourkey > -1) {
 			compliments = this.config.compliments[this.config.hourmap[hourkey]];
