@@ -10,29 +10,20 @@
 Module.register("MMM-kudos", {
 	defaults: {
 		kudos: {
-			anytime: [
-				"Und jetzt einen Kaffee!",
+			anytime: ["Und jetzt einen Kaffee!"],
+			morning: ["Guten Morgen, Sonnenschein!"],
+			lunch: ["Mahlzeit!"],
+			afternoon: ["Schon Feierabend?"],
+			evening: ["Eine Augenweide!"],
+			night: ["Schlaf schön!"],
+			"....-01-01": [
+				"Gesundes Neues Jahr!",
+				"Neue Vorsätze für das neue Jahr gefasst?",
 			],
-			morning: [
-				"Guten Morgen, Sonnenschein!",
-			],
-			lunch: [
-				"Mahlzeit!",
-			],
-			afternoon: [
-				"Schon Feierabend?",
-			],
-			evening: [
-				"Eine Augenweide!",
-			],
-			night: [
-				"Schlaf schön!",
-			],
-			"....-01-01": ["Gesundes Neues Jahr!", "Neue Vorsätze für das neue Jahr gefasst?"],
 		},
 		fadeSpeed: 4000,
 		hourmap: {
-			 5: "morning",
+			5: "morning",
 			11: "lunch",
 			15: "afternoon",
 			19: "evening",
@@ -41,15 +32,15 @@ Module.register("MMM-kudos", {
 		remoteFile: null,
 		random: true,
 		shrinkLimit: 35,
-		updateInterval: 30000
+		updateInterval: 30000,
 	},
 	lastIndexUsed: -1,
-  // Set currentweather from module
+	// Set currentweather from module
 	currentWeatherType: "",
 	requiresVersion: "2.1.0", // Required version of MagicMirror
 
 	// Define required scripts.
-	getScripts: function() {
+	getScripts: function () {
 		return ["moment.js"];
 	},
 
@@ -66,7 +57,9 @@ Module.register("MMM-kudos", {
 		}
 
 		// set subset at begin of day to same as end of day
-		this.config.hourmap[0] = this.config.hourmap[0] ? this.config.hourmap[0] : this.config.hourmap[this.hourKey(24)]
+		this.config.hourmap[0] = this.config.hourmap[0]
+			? this.config.hourmap[0]
+			: this.config.hourmap[this.hourKey(24)];
 
 		// Schedule update timer.
 		setInterval(() => {
@@ -99,8 +92,8 @@ Module.register("MMM-kudos", {
 		return kudoIndex;
 	},
 
-  hourKey: function(hour) {
-		while (!(hour in this.config.hourmap) || hour < 0){
+	hourKey: function (hour) {
+		while (!(hour in this.config.hourmap) || hour < 0) {
 			hour = hour - 1;
 		}
 
@@ -111,12 +104,12 @@ Module.register("MMM-kudos", {
 	 * Retrieve an array of kudos for the time of the day.
 	 * @returns {string[]} array with kudos for the time of the day.
 	 */
-	kudoArray: function() {
+	kudoArray: function () {
 		const hour = moment().hour();
 		const date = moment().format("YYYY-MM-DD");
 		let kudos = [];
 
-		var hourkey =  this.hourKey(hour);
+		var hourkey = this.hourKey(hour);
 
 		if (hourkey > -1) {
 			kudos = [...this.config.kudos[this.config.hourmap[hourkey]]];
@@ -124,7 +117,10 @@ Module.register("MMM-kudos", {
 
 		// Add kudos based on weather
 		if (this.currentWeatherType in this.config.kudos) {
-			Array.prototype.push.apply(kudos, this.config.kudos[this.currentWeatherType]);
+			Array.prototype.push.apply(
+				kudos,
+				this.config.kudos[this.currentWeatherType]
+			);
 		}
 
 		// Add kudos for anytime
@@ -145,8 +141,12 @@ Module.register("MMM-kudos", {
 	 * @returns {Promise} Resolved when the file is loaded
 	 */
 	loadKudoFile: async function () {
-		const isRemote = this.config.remoteFile.indexOf("http://") === 0 || this.config.remoteFile.indexOf("https://") === 0,
-			url = isRemote ? this.config.remoteFile : this.file(this.config.remoteFile);
+		const isRemote =
+				this.config.remoteFile.indexOf("http://") === 0 ||
+				this.config.remoteFile.indexOf("https://") === 0,
+			url = isRemote
+				? this.config.remoteFile
+				: this.file(this.config.remoteFile);
 		const response = await fetch(url);
 		return await response.text();
 	},
@@ -174,9 +174,11 @@ Module.register("MMM-kudos", {
 	},
 
 	// Override dom generator.
-	getDom: function() {
+	getDom: function () {
 		const wrapper = document.createElement("div");
-		wrapper.className = this.config.classes ? this.config.classes : "thin xlarge bright pre-line";
+		wrapper.className = this.config.classes
+			? this.config.classes
+			: "thin xlarge bright pre-line";
 		// get the kudo text
 		const kudoText = this.getRandomKudo();
 		// split it into parts on newline text
@@ -187,11 +189,11 @@ Module.register("MMM-kudos", {
 		for (const part of parts) {
 			if (part !== "") {
 				// create a text element for each part
- 				kudo.appendChild(document.createTextNode(part));
+				kudo.appendChild(document.createTextNode(part));
 				// add a break
 				kudo.appendChild(document.createElement("BR"));
-      }
-    }
+			}
+		}
 		// only add kudo to wrapper if there is actual text in there
 		if (kudo.children.length > 0) {
 			// remove the last break
@@ -206,5 +208,5 @@ Module.register("MMM-kudos", {
 		if (notification === "CURRENTWEATHER_TYPE") {
 			this.currentWeatherType = payload.type;
 		}
-	}
+	},
 });
