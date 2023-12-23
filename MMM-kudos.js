@@ -9,6 +9,28 @@
 
 Module.register("MMM-kudos", {
 	defaults: {
+		kudos: {
+			anytime: [
+				"Und jetzt einen Kaffee!",
+			],
+			morning: [
+				"Guten Morgen, Sonnenschein!",
+			],
+			lunch: [
+				"Mahlzeit!",
+			],
+			afternoon: [
+				"Schon Feierabend?",
+			],
+			evening: [
+				"Eine Augenweide!",
+			],
+			night: [
+				"Schlaf schön!",
+			],
+			"....-01-01": ["Gesundes Neues Jahr!", "Neue Vorsätze für das neue Jahr gefasst?"],
+		},
+		fadeSpeed: 4000,
 		hourmap: {
 			 5: "morning",
 			11: "lunch",
@@ -16,52 +38,14 @@ Module.register("MMM-kudos", {
 			19: "evening",
 			23: "night",
 		},
-		shrinkLimit: 35,
-		kudos: {
-			anytime: [
-				"Und jetzt einen Kaffee!",
-				"Dem Kühnen lächeln die Götter zu!",
-				"Herkules war auch mal schwach.",
-			],
-			morning: [
-				"Guten Morgen, Sonnenschein!",
-				"Genieße den Tag",
-				"Gut geschlafen?",
-				"Der frühe Vogel ...",
-			],
-			lunch: [
-				"Mahlzeit!",
-				"Gibt's was zu Essen?",
-				"Wer kocht heute?",
-				"Mittagsschlaf?",
-			],
-			afternoon: [
-				"Wow, sexy!",
-				"Du siehst gut aus!",
-				"Heute ist Dein Tag!",
-				"Schon Feierabend?",
-			],
-			evening: [
-				"Eine Augenweide!",
-				"Bettzeit?",
-				"Was für ein Tag ...",
-				"Es ist ein Genuß dich zu sehen!",
-				"Wie war dein Tag?",
-				"Meine Augen befinden sich bereits im Zustand seeliger Vorfreude!",
-			],
-			night: [
-				"Noch nicht müde?",
-				"Nu aber ab ins Bett!",
-				"Wird wohl wieder spät heute?",
-				"Schlaf schön!",
-				"Kannst du nicht schlafen?",
-			]
-		},
-		updateInterval: 30000,
 		remoteFile: null,
-		fadeSpeed: 4000
+		random: true,
+		shrinkLimit: 35,
+		updateInterval: 30000
 	},
-
+	lastIndexUsed: -1,
+  // Set currentweather from module
+	currentWeatherType: "",
 	requiresVersion: "2.1.0", // Required version of MagicMirror
 
 	// Define required scripts.
@@ -70,44 +54,41 @@ Module.register("MMM-kudos", {
 	},
 
 	// Define start sequence.
-	start: function() {
-		Log.info("Starting module: " + this.name);
+	start: async function () {
+		Log.info(`Starting module: ${this.name}`);
 
 		this.lastKudoIndex = -1;
 
-		if (this.config.remoteFile != null) {
-			this.kudoFile((response) => {
-				this.config.kudos = JSON.parse(response);
-			});
+		if (this.config.remoteFile !== null) {
+			const response = await this.loadKudoFile();
+			this.config.kudos = JSON.parse(response);
+			this.updateDom();
 		}
 
 		// set subset at begin of day to same as end of day
 		this.config.hourmap[0] = this.config.hourmap[0] ? this.config.hourmap[0] : this.config.hourmap[this.hourKey(24)]
 
 		// Schedule update timer.
-		var self = this;
-		setInterval(function() {
-			self.updateDom(self.config.fadeSpeed);
+		setInterval(() => {
+			this.updateDom(this.config.fadeSpeed);
 		}, this.config.updateInterval);
 	},
 
-	/* randomIndex(kudos)
+	/**
 	 * Generate a random index for a list of kudos.
-	 *
-	 * argument kudos Array<String> - Array with kudos.
-	 *
-	 * return Number - Random index.
+	 * @param {string[]} kudos Array with kudos.
+	 * @returns {number} a random index of given array
 	 */
-	randomIndex: function(kudos) {
+	randomIndex: function (kudos) {
 		if (kudos.length === 1) {
 			return 0;
 		}
 
-		var generate = function() {
+		const generate = function () {
 			return Math.floor(Math.random() * kudos.length);
 		};
 
-		var kudoIndex = generate();
+		let kudoIndex = generate();
 
 		while (kudoIndex === this.lastKudoIndex) {
 			kudoIndex = generate();
@@ -126,67 +107,104 @@ Module.register("MMM-kudos", {
 		return hour;
 	},
 
-	/* kudoArray()
+	/**
 	 * Retrieve an array of kudos for the time of the day.
-	 *
-	 * return kudos Array<String> - Array with kudos for the time of the day.
+	 * @returns {string[]} array with kudos for the time of the day.
 	 */
 	kudoArray: function() {
-		var hour = moment().hour();
-		var kudos = new Array();
+		const hour = moment().hour();
+		const date = moment().format("YYYY-MM-DD");
+		let kudos = [];
 
 		var hourkey =  this.hourKey(hour);
 
 		if (hourkey > -1) {
-			kudos.push.apply(kudos, this.config.kudos[this.config.hourmap[hourkey]]);
+			kudos = [...this.config.kudos[this.config.hourmap[hourkey]]];
 		}
 
-		kudos.push.apply(kudos, this.config.kudos.anytime);
+		// Add kudos based on weather
+		if (this.currentWeatherType in this.config.kudos) {
+			Array.prototype.push.apply(kudos, this.config.kudos[this.currentWeatherType]);
+		}
+
+		// Add kudos for anytime
+		Array.prototype.push.apply(kudos, this.config.kudos.anytime);
+
+		// Add kudos for special days
+		for (let entry in this.config.kudos) {
+			if (new RegExp(entry).test(date)) {
+				Array.prototype.push.apply(kudos, this.config.kudos[entry]);
+			}
+		}
 
 		return kudos;
 	},
 
-	/* kudoFile(callback)
+	/**
 	 * Retrieve a file from the local filesystem
+	 * @returns {Promise} Resolved when the file is loaded
 	 */
-	kudoFile: function(callback) {
-		var xobj = new XMLHttpRequest();
-		xobj.overrideMimeType("application/json");
-		xobj.open("GET", this.file(this.config.remoteFile), true);
-		xobj.onreadystatechange = function() {
-			if (xobj.readyState == 4 && xobj.status == "200") {
-				callback(xobj.responseText);
-			}
-		};
-		xobj.send(null);
+	loadKudoFile: async function () {
+		const isRemote = this.config.remoteFile.indexOf("http://") === 0 || this.config.remoteFile.indexOf("https://") === 0,
+			url = isRemote ? this.config.remoteFile : this.file(this.config.remoteFile);
+		const response = await fetch(url);
+		return await response.text();
 	},
 
-	/* kudoArray()
+	/**
 	 * Retrieve a random kudo.
-	 *
-	 * return kudo string - A kudo.
+	 * @returns {string} a kudo
 	 */
-	randomKudo: function() {
-		var kudos = this.kudoArray();
-		var index = this.randomIndex(kudos);
+	getRandomKudo: function () {
+		// get the current time of day kudos list
+		const kudos = this.kudoArray();
+		// variable for index to next message to display
+		let index;
+		// are we randomizing
+		if (this.config.random) {
+			// yes
+			index = this.randomIndex(kudos);
+		} else {
+			// no, sequential
+			// if doing sequential, don't fall off the end
+			index = this.lastIndexUsed >= kudos.length - 1 ? 0 : ++this.lastIndexUsed;
+		}
 
-		return kudos[index];
+		return kudos[index] || "";
 	},
 
 	// Override dom generator.
 	getDom: function() {
-		var kudoText = this.randomKudo();
-
-		var kudo = document.createTextNode(kudoText);
-		var wrapper = document.createElement("div");
-		if (kudo.length < this.config.shrinkLimit) {
-			wrapper.className = this.config.classes ? this.config.classes : "thin xlarge bright";
-		} else {
-			wrapper.className = this.config.shrinkClasses ? this.config.shrinkClasses : "light medium bright";
+		const wrapper = document.createElement("div");
+		wrapper.className = this.config.classes ? this.config.classes : "thin xlarge bright pre-line";
+		// get the kudo text
+		const kudoText = this.getRandomKudo();
+		// split it into parts on newline text
+		const parts = kudoText.split("\n");
+		// create a span to hold the kudo
+		const kudo = document.createElement("span");
+		// process all the parts of the kudo text
+		for (const part of parts) {
+			if (part !== "") {
+				// create a text element for each part
+ 				kudo.appendChild(document.createTextNode(part));
+				// add a break
+				kudo.appendChild(document.createElement("BR"));
+      }
+    }
+		// only add kudo to wrapper if there is actual text in there
+		if (kudo.children.length > 0) {
+			// remove the last break
+			kudo.lastElementChild.remove();
+			wrapper.appendChild(kudo);
 		}
-		wrapper.appendChild(kudo);
-
 		return wrapper;
 	},
 
+	// Override notification handler.
+	notificationReceived: function (notification, payload, sender) {
+		if (notification === "CURRENTWEATHER_TYPE") {
+			this.currentWeatherType = payload.type;
+		}
+	}
 });
