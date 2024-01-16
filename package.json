@@ -1,18 +1,26 @@
 {
   "name": "MMM-kudos",
-  "version": "1.0.0",
-  "description": "MMM-kudos displays a kudo out of a set of predefined ones. Depending on the current hour the used kudo set can be defined.",
+  "version": "1.0.1",
+  "description": "MMM-kudos is a module for MagicMirror² that displays a random kudo message from a predefined set. The module allows you to define different sets of kudos based on the current hour.",
   "main": "MMM-kudos.js",
   "author": "Thomas Mohaupt",
   "license": "MIT",
+  "keywords": [
+    "magic mirror",
+    "module",
+    "screen"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thomo/MMM-kudos"
+  },
+  "scripts": {
+    "reset": "git reset --hard",
+    "clean": "rm -rf node_modules package-lock.json"
+  },
   "devDependencies": {
-    "grunt": "latest",
-    "grunt-eslint": "latest",
-    "grunt-jsonlint": "latest",
-    "grunt-markdownlint": "^1.0.13",
-    "grunt-stylelint": "latest",
-    "grunt-yamllint": "latest",
-    "stylelint-config-standard": "latest",
-    "time-grunt": "latest"
   }
 }
