@@ -1,18 +1,25 @@
 # MMM-kudos
+A MagicMirror² module to display motivational or fun kudos based on the time of day.
 
 This is a module for the [MagicMirror²](https://github.com/MichMich/MagicMirror/).
 
-The module is based on the default compliment module. MMM-kudos displays a kudo out of a set of predefined ones. Depending on the current hour the used kudo set can be defined.
+MMM-kudos is based on the default compliment module. It displays a kudo from a predefined set, with the ability to customize which kudos are shown based on the current hour. You can also define day specific set of messages, e.g. to remember special dates.
 
-## Using the module
+## Table of Contents
+1. [Using the Module](#using-the-module)
+2. [Configuration Options](#configuration-options)
+3. [Kudos Configuration Example](#kudos-configuration-example)
+4. [Additional Information](#additional-information)
 
-To use this module, add the following configuration block to the modules array in the `config/config.js` file:
+## Using the Module
+
+To use this module, add the following configuration block to the `modules` array in your `config/config.js` file. The `position` field determines where the module will appear on the MagicMirror² interface. Refer to the [MagicMirror² configuration documentation](https://docs.magicmirror.builders/modules/configuration.html) for possible values.
 ```js
 var config = {
     modules: [
         {
             module: 'MMM-kudos',
-            position: "middle_center", // see https://github.com/MichMich/MagicMirror#configuration for possible values
+            position: "middle_center", // see https://docs.magicmirror.builders/modules/configuration.html for possible values
             config: {
                 // See below for configurable options
             }
@@ -25,17 +32,20 @@ var config = {
 
 | Option           | Description
 |----------------- |-----------
-| `hourmap`        | A map which defines the start hours of kudos sets.
-| `shrinkLimit`    | Length of kudo at which a smaller font is used to display it.
-| `classes`        | *Optional* CSS classes used to display the kudo.
-| `shrinkClasses`  | *Optional* CSS classes used to shrink the kudo.
-| `updateInterval` | How often does the kudo have to change? (Milliseconds) <br><br> **Possible values:** `1000` - `86400000` <br> **Default value:** `30000` (30 seconds)
-| `fadeSpeed`      | Speed of the update animation. (Milliseconds) <br><br> **Possible values:**`0` - `5000` <br> **Default value:** `4000` (4 seconds)
-| `kudos`	         | The list of kudos. <br><br> **Possible values:** An object with some arrays - the names are defined in the values of the _hourmap object_ plus the default array `anytime`. See _kudos configuration_ below. <br> **Default value:** See _kudos configuration_ below.
-| `remoteFile`     | External file from which to load the kudos <br><br> **Possible values:** Path to a JSON file containing kudos, configured as per the value of the _kudos configuration_ (see below).<br> **Default value:** `null` (Do not load from file)
+| `hourmap`        | A map defining the start hours for different kudos sets. A set is valid starting at the given hour until the next defined hour, the last hour will be valid until the first.<br> Example: `{ 5: "morning", 11: "lunch", 18: "evening" }` means: <br> - the "morning" set will be used from 5-11,<br> - the "lunch" from 11-18, and<br> - the "evening" from 18-5.
+| `shrinkLimit`    | The character length at which a smaller font is used to display the kudo. Example: `35`.
+| `classes`        | *Optional* CSS classes used to style the kudo. Example: `"bright large"`.
+| `shrinkClasses`  | *Optional* CSS classes used to style the shrunk kudo. Example: `"small dimmed"`.
+| `updateInterval` | Defines how often the kudo changes. (Milliseconds) <br><br> **Possible values:** `1000` - `86400000` <br> **Default value:** `30000` (30 seconds)
+| `fadeSpeed`      | Speed of the update animation. (Milliseconds) <br><br> **Possible values:** `0` - `5000` <br> **Default value:** `4000` (4 seconds)
+| `kudos`	         | The list of kudos. <br><br> **Possible values:** An object with arrays - the names are defined in the values of the _hourmap object_ plus the default array `anytime`. See [Kudos Configuration Example](#kudos-configuration-example). <br> **Default value:** See [Kudos Configuration Example](#kudos-configuration-example).
+| `remoteFile`     | External file from which to load the kudos. <br><br> **Possible values:** Path to a JSON file containing kudos, structured as per the _kudos configuration_.<br> **Default value:** `null` (Do not load from file)
 
 
-````javascript
+### Kudos Configuration Example
+Below is an example of how to configure the `kudos` object:
+
+```js
 config: {
   hourmap: {
      5: "morning",
@@ -47,46 +57,60 @@ config: {
   shrinkLimit: 35,
   kudos: {
     anytime: [
-      "Und jetzt einen Kaffee!",
-      "Dem Kühnen lächeln die Götter zu!",
-      "Herkules war auch mal schwach.",
+      "Time for a coffee break!",
+      "Fortune favors the bold!",
+      "Even Hercules had his off days.",
     ],
     morning: [
-      "Guten Morgen, Sonnenschein!",
-      "Genieße den Tag",
-      "Gut geschlafen?",
-      "Der frühe Vogel ...",
+      "Good morning, sunshine!",
+      "Make the most of your day!",
+      "Did you sleep well?",
+      "The early bird catches the worm...",
     ],
     lunch: [
-      "Mahlzeit!",
-      "Gibt's was zu Essen?",
-      "Wer kocht heute?",
-      "Mittagsschlaf?",
+      "Lunch time!",
+      "What's on the menu?",
+      "Who's cooking today?",
+      "Time for a power nap?",
     ],
     afternoon: [
-      "Wow, sexy!",
-      "Du siehst gut aus!",
-      "Heute ist Dein Tag!",
-      "Schon Feierabend?",
+      "Wow, looking sharp!",
+      "You're glowing today!",
+      "Today is your day!",
+      "Clocking out already?",
     ],
     evening: [
-      "Eine Augenweide!",
-      "Bettzeit?",
-      "Was für ein Tag ...",
-      "Es ist ein Genuß dich zu sehen!",
-      "Wie war dein Tag?",
-      "Meine Augen befinden sich bereits im Zustand seeliger Vorfreude!",
+      "A sight for sore eyes!",
+      "Is it bedtime yet?",
+      "What a day it's been...",
+      "It's a delight to see you!",
+      "How was your day?",
+      "My eyes are already in a state of blissful anticipation!",
     ],
     night: [
-      "Noch nicht müde?",
-      "Nu aber ab ins Bett!",
-      "Wird wohl wieder spät heute?",
-      "Schlaf schön!",
-      "Kannst du nicht schlafen?",
-    ]
+      "Not tired yet?",
+      "Time to hit the hay!",
+      "Burning the midnight oil again?",
+      "Sleep tight!",
+      "Having trouble sleeping?",
+    ],
+    "....-01-01": [
+        "Happy New Year"
+    ],
+    "....-06-30": [
+        "Happy Birthday",
+    ],
+    "....-12-06": [
+        "Dont forget to 'Buy ThoMo a coffee'",
+    ],
   },
   updateInterval: 30000,
   remoteFile: null,
   fadeSpeed: 4000
 }
-````
+```
+
+## Support
+Like this module? Keep me awake and coding — buy me a coffee ☕️.
+
+<a href="https://www.buymeacoffee.com/thomo" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
