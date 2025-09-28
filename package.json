@@ -1,7 +1,7 @@
 {
-  "name": "MMM-kudos",
+  "name": "mmm-kudos",
   "version": "1.0.1",
-  "description": "MMM-kudos is a module for MagicMirror² that displays a random kudo message from a predefined set. The module allows you to define different sets of kudos based on the current hour.",
+  "description": "MMM-kudos is a module for MagicMirror² that displays a random kudo message from a predefined set. The module allows you to define different sets of kudos based on the current hour and current date.",
   "main": "MMM-kudos.js",
   "author": "Thomas Mohaupt",
   "license": "MIT",
@@ -19,8 +19,14 @@
   },
   "scripts": {
     "reset": "git reset --hard",
-    "clean": "rm -rf node_modules package-lock.json"
+    "clean": "rm -rf node_modules package-lock.json",
+    "lint": "eslint",
+    "lint:fix": "eslint --fix"
   },
   "devDependencies": {
+    "@eslint/js": "^9.36.0",
+    "@stylistic/eslint-plugin": "^5.4.0",
+    "eslint": "^9.36.0",
+    "globals": "^16.4.0"
   }
 }

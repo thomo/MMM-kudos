@@ -1,34 +1,31 @@
 # MMM-kudos
 A MagicMirror² module to display motivational or fun kudos based on the time of day.
 
-This is a module for the [MagicMirror²](https://github.com/MichMich/MagicMirror/).
+This is a module for the [MagicMirror²](https://github.com/MagicMirrorOrg/MagicMirror/).
 
 MMM-kudos is based on the default compliment module. It displays a kudo from a predefined set, with the ability to customize which kudos are shown based on the current hour. You can also define day specific set of messages, e.g. to remember special dates.
 
 ## Table of Contents
-1. [Using the Module](#using-the-module)
-2. [Configuration Options](#configuration-options)
+1. [Installation](#installation)
+2. [Configuration](#configuration)
 3. [Kudos Configuration Example](#kudos-configuration-example)
-4. [Additional Information](#additional-information)
+4. [Support](#support)
 
-## Using the Module
+## Installation
 
-To use this module, add the following configuration block to the `modules` array in your `config/config.js` file. The `position` field determines where the module will appear on the MagicMirror² interface. Refer to the [MagicMirror² configuration documentation](https://docs.magicmirror.builders/modules/configuration.html) for possible values.
+To install this module, add the following configuration block to the `modules` array in your `config/config.js` file. The `position` field determines where the module will appear on the MagicMirror² interface. Refer to the [MagicMirror² configuration documentation](https://docs.magicmirror.builders/modules/configuration.html) for possible values.
+
 ```js
-var config = {
-    modules: [
-        {
-            module: 'MMM-kudos',
-            position: "middle_center", // see https://docs.magicmirror.builders/modules/configuration.html for possible values
-            config: {
-                // See below for configurable options
-            }
-        }
-    ]
+{
+    module: 'MMM-kudos',
+    position: "middle_center", // see https://docs.magicmirror.builders/modules/configuration.html for possible values
+    config: {
+        // See below for configurable options
+    }
 }
 ```
 
-## Configuration options
+## Configuration
 
 | Option           | Description
 |----------------- |-----------
@@ -43,7 +40,7 @@ var config = {
 
 
 ### Kudos Configuration Example
-Below is an example of how to configure the `kudos` object:
+Below is an example of how to configure the `kudos` object. It defines 5 time ranges: morning (5-11), lunch (11-15), afternoon (15-19), evening (19-23), and night (23-5). For each time range an array of kudos are defined which are used in this range. The default array `anytime` is used additional in each time range. Also the on 1st Jan, 4th May and 6th Dec some special kudos are selected. 
 
 ```js
 config: {
@@ -74,7 +71,7 @@ config: {
       "Time for a power nap?",
     ],
     afternoon: [
-      "Wow, looking sharp!",
+      "Wow, you look great!",
       "You're glowing today!",
       "Today is your day!",
       "Clocking out already?",
@@ -97,8 +94,8 @@ config: {
     "....-01-01": [
         "Happy New Year"
     ],
-    "....-06-30": [
-        "Happy Birthday",
+    "....-05-04": [
+        "May the force be with you",
     ],
     "....-12-06": [
         "Dont forget to 'Buy ThoMo a coffee'",
@@ -106,9 +103,17 @@ config: {
   },
   updateInterval: 30000,
   remoteFile: null,
-  fadeSpeed: 4000
-}
+  fadeSpeed: 4000,
+},
 ```
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE.md) file for details.
+
+## Changelog
+
+All notable changes to this project will be documented in the [CHANGELOG.md](CHANGELOG.md) file.
 
 ## Support
 Like this module? Keep me awake and coding — buy me a coffee ☕️.
