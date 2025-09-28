@@ -36,6 +36,8 @@ Module.register("MMM-kudos", {
   // Set currentweather from module
   currentWeatherType: "",
   requiresVersion: "2.1.0", // Required version of MagicMirror
+  refreshMinimumDelay: 15, // minutes
+  kudos_new: null,
 
   // Define required scripts.
   getScripts: function () {
@@ -52,12 +54,22 @@ Module.register("MMM-kudos", {
       const response = await this.loadKudoFile();
       this.config.kudos = JSON.parse(response);
       this.updateDom();
-    }
 
-    // set subset at begin of day to same as end of day
-    this.config.hourmap[0] = this.config.hourmap[0]
-      ? this.config.hourmap[0]
-      : this.config.hourmap[this.hourKey(24)];
+      if (this.config.remoteFileRefreshInterval !== 0) {
+        const refreshInterval = Math.max(
+          this.config.remoteFileRefreshInterval,
+          this.refreshMinimumDelay
+        ) * 60 * 1000;
+        setInterval(async () => {
+          const response = await this.loadKudoFile();
+          if (response) {
+            this.kudos_new = JSON.parse(response);
+          } else {
+            Log.error(`${this.name} remoteFile refresh failed`);
+          }
+        }, refreshInterval);
+      }
+    }
 
     // Schedule update timer.
     setInterval(() => {
@@ -70,7 +82,7 @@ Module.register("MMM-kudos", {
    * @param {string[]} kudos Array with kudos.
    * @returns {number} a random index of given array
    */
-  randomIndex: function (kudos) {
+  randomKudoIndex: function (kudos) {
     if (kudos.length === 1) {
       return 0;
     }
@@ -81,21 +93,27 @@ Module.register("MMM-kudos", {
 
     let kudoIndex = generate();
 
-    while (kudoIndex === this.lastKudoIndex) {
+    do {
       kudoIndex = generate();
-    }
+    } while (kudoIndex === this.lastKudoIndex);
 
     this.lastKudoIndex = kudoIndex;
 
     return kudoIndex;
   },
 
-  hourKey: function (hour) {
-    while (!(hour in this.config.hourmap) || hour < 0) {
+  hourMapKey: function (hour) {
+    if (this.config.hourmap == null
+      || Object.keys(this.config.hourmap).length === 0
+    ) {
+      return -1;
+    }
+
+    while (!(hour in this.config.hourmap) && hour > -1) {
       hour = hour - 1;
     }
 
-    return hour;
+    return hour < 0 ? this.hourMapKey(24) : hour;
   },
 
   /**
@@ -103,22 +121,20 @@ Module.register("MMM-kudos", {
    * @returns {string[]} array with kudos for the time of the day.
    */
   kudoArray: function () {
-    const hour = moment().hour();
-    const date = moment().format("YYYY-MM-DD");
+    const now = moment();
+    const hour = now.hour();
+    const date = now.format("YYYY-MM-DD");
     let kudos = [];
 
-    var hourkey = this.hourKey(hour);
+    var hourMapKey = this.hourMapKey(hour);
 
-    if (hourkey > -1) {
-      kudos = [...this.config.kudos[this.config.hourmap[hourkey]]];
+    if (hourMapKey > -1) {
+      kudos = [...this.config.kudos[this.config.hourmap[hourMapKey]]];
     }
 
     // Add kudos based on weather
     if (this.currentWeatherType in this.config.kudos) {
-      Array.prototype.push.apply(
-        kudos,
-        this.config.kudos[this.currentWeatherType]
-      );
+      Array.prototype.push.apply(kudos, this.config.kudos[this.currentWeatherType]);
     }
 
     // Add kudos for anytime
@@ -160,7 +176,7 @@ Module.register("MMM-kudos", {
     // are we randomizing
     if (this.config.random) {
       // yes
-      index = this.randomIndex(kudos);
+      index = this.randomKudoIndex(kudos);
     } else {
       // no, sequential
       // if doing sequential, don't fall off the end
@@ -196,6 +212,16 @@ Module.register("MMM-kudos", {
       // remove the last break
       kudo.lastElementChild.remove();
       wrapper.appendChild(kudo);
+    }
+
+    // if a new set of kudos was loaded from the refresh task
+    if (this.kudos_new) {
+      // did is change?
+      if (JSON.stringify(this.config.kudos) !== JSON.stringify(this.kudos_new)) {
+        this.config.kudos = this.kudos_new;
+        this.lastIndexUsed = -1;
+      }
+      this.kudos_new = null;
     }
     return wrapper;
   },

@@ -2,6 +2,7 @@ import { defineConfig } from "eslint/config";
 import globals from "globals";
 import js from "@eslint/js";
 import stylistic from "@stylistic/eslint-plugin";
+import jestPlugin from "eslint-plugin-jest";
 
 export default defineConfig([
   {
@@ -11,12 +12,17 @@ export default defineConfig([
       globals: {
         ...globals.browser,
         ...globals.node,
+        ...globals.jest,
         Log: "readonly",
         Module: "readonly",
         moment: "readonly",
       },
     },
-    plugins: { js, stylistic },
+    plugins: {
+      js,
+      stylistic,
+      jest: jestPlugin,
+    },
     extends: ["js/recommended", "stylistic/recommended"],
     rules: {
       "@stylistic/brace-style": ["error", "1tbs", { allowSingleLine: true }],
@@ -26,6 +32,11 @@ export default defineConfig([
       "@stylistic/quote-props": ["error", "consistent-as-needed"],
       "@stylistic/semi": ["error", "always"],
       "@stylistic/semi-style": ["error", "last"],
+      "jest/no-disabled-tests": "warn",
+      "jest/no-focused-tests": "error",
+      "jest/no-identical-title": "error",
+      "jest/prefer-to-have-length": "warn",
+      "jest/valid-expect": "error",
     },
   },
 ]);
