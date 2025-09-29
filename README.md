@@ -10,10 +10,13 @@ MMM-kudos is based on the default compliment module. It displays a random kudo f
 - a date specific group. 
 
 ## Table of Contents
-1. [Installation](#installation)
-2. [Configuration](#configuration)
-3. [Kudos Configuration Example](#kudos-configuration-example)
-4. [Support](#support)
+- [Installation](#installation)
+- [Configuration](#configuration)
+    - [Weather keys](#weather-keys)
+    - [Kudos Configuration Example](#kudos-configuration-example)
+- [License](#license)    
+- [Changelog](#changelog)    
+- [Support](#support)
 
 ## Installation
 
