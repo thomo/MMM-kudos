@@ -91,7 +91,7 @@ Module.register("MMM-kudos", {
       return Math.floor(Math.random() * kudos.length);
     };
 
-    let kudoIndex = generate();
+    let kudoIndex;
 
     do {
       kudoIndex = generate();

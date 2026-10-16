@@ -16,8 +16,8 @@ describe("MMM-kudos", () => {
     instance = Object.assign({}, moduleInstance);
     instance.config = JSON.parse(JSON.stringify(moduleInstance.defaults));
     instance.config.hourmap = {
-        5: ["first morning kudo"],
-        20: ["first night kudo"]
+      5: ["first morning kudo"],
+      20: ["first night kudo"]
     };
   });
 
@@ -28,8 +28,8 @@ describe("MMM-kudos", () => {
     });
 
     test("hourMapKey - when hourmap is empty", () => {
-        instance.config.hourmap = {};
-        expect(instance.hourMapKey(6)).toBe(-1);
+      instance.config.hourmap = {};
+      expect(instance.hourMapKey(6)).toBe(-1);
     });
 
     test("hourMapKey - when current hour is after first defined hour", () => {
@@ -47,7 +47,6 @@ describe("MMM-kudos", () => {
     test("hourMapKey - when hour when it is before first defined hour", () => {
       expect(instance.hourMapKey(3)).toBe(20);
     });
-
   });
 
   describe("randomKudoIndex", () => {

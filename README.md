@@ -10,17 +10,33 @@ MMM-kudos is based on the default compliment module. It displays a random kudo f
 - a date specific group. 
 
 ## Table of Contents
+- [Requirements](#requirements)
 - [Installation](#installation)
 - [Configuration](#configuration)
     - [Weather keys](#weather-keys)
     - [Kudos Configuration Example](#kudos-configuration-example)
+- [Development](#development)
 - [License](#license)    
 - [Changelog](#changelog)    
 - [Support](#support)
 
+## Requirements
+
+- MagicMirror² 2.25.0 or newer (tested up to 2.38.0)
+- The module has no runtime dependencies, so no `npm install` is needed to run it.
+
 ## Installation
 
-To install this module, add the following configuration block to the `modules` array in your `config/config.js` file. The `position` field determines where the module will appear on the MagicMirror² interface. Refer to the [MagicMirror² configuration documentation](https://docs.magicmirror.builders/modules/configuration.html) for possible values.
+Clone the module into the `modules` folder of your MagicMirror² installation:
+
+```sh
+cd ~/MagicMirror/modules
+git clone https://github.com/thomo/MMM-kudos
+```
+
+To update the module later, run `git pull` in the `MMM-kudos` folder.
+
+Then add the following configuration block to the `modules` array in your `config/config.js` file. The `position` field determines where the module will appear on the MagicMirror² interface. Refer to the [MagicMirror² configuration documentation](https://docs.magicmirror.builders/modules/configuration.html) for possible values.
 
 ```js
 {
@@ -136,6 +152,16 @@ config: {
   remoteFile: null,
   fadeSpeed: 4000,
 },
+```
+
+## Development
+
+Linting and tests need Node.js 20.19 or newer (tested with Node.js 20, 22 and 26).
+
+```sh
+npm install
+npm run lint
+npm test
 ```
 
 ## License

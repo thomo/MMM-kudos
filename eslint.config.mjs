@@ -19,11 +19,11 @@ export default defineConfig([
       },
     },
     plugins: {
-      js,
-      stylistic,
-      jest: jestPlugin,
+      "js": js,
+      "@stylistic": stylistic,
+      "jest": jestPlugin,
     },
-    extends: ["js/recommended", "stylistic/recommended"],
+    extends: ["js/recommended", "@stylistic/recommended"],
     rules: {
       "@stylistic/brace-style": ["error", "1tbs", { allowSingleLine: true }],
       "@stylistic/comma-dangle": ["error", "only-multiline"],
