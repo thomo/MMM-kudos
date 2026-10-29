@@ -28,6 +28,7 @@ Module.register("MMM-kudos", {
       23: "night",
     },
     remoteFile: null,
+    // minutes; 0 = no refresh, otherwise values below refreshMinimumDelay (15) are raised to 15
     remoteFileRefreshInterval: 0,
     random: true,
     shrinkLimit: 35,
