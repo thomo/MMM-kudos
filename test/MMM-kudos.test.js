@@ -21,6 +21,12 @@ describe("MMM-kudos", () => {
     };
   });
 
+  describe("defaults", () => {
+    test("remoteFileRefreshInterval defaults to 0 (no refresh)", () => {
+      expect(moduleInstance.defaults.remoteFileRefreshInterval).toBe(0);
+    });
+  });
+
   describe("hourMapKey", () => {
     test("hourMapKey - when hourmap is undefined", () => {
       instance.config.hourmap = null;

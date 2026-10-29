@@ -1,3 +1,7 @@
+## Unreleased
+
+- fix: add missing default `remoteFileRefreshInterval: 0`; without it the refresh timer got `NaN` as delay and re-fetched `remoteFile` in a tight loop, exhausting memory and crashing the renderer
+
 ## 1.0.3 - 2026-10-15
 
 - update dev dependencies (eslint 10, jest 30, globals 17, @stylistic/eslint-plugin 5.10, eslint-plugin-jest 29.16, moment 2.31)

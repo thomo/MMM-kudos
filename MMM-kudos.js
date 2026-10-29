@@ -28,6 +28,7 @@ Module.register("MMM-kudos", {
       23: "night",
     },
     remoteFile: null,
+    remoteFileRefreshInterval: 0,
     random: true,
     shrinkLimit: 35,
     updateInterval: 30000,
