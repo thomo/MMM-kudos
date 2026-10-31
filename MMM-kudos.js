@@ -53,9 +53,11 @@ Module.register("MMM-kudos", {
     this.lastKudoIndex = -1;
 
     if (this.config.remoteFile !== null) {
-      const response = await this.loadKudoFile();
-      this.config.kudos = JSON.parse(response);
-      this.updateDom();
+      const kudos = await this.loadKudoFile();
+      if (kudos) {
+        this.config.kudos = kudos;
+        this.updateDom();
+      }
 
       if (this.config.remoteFileRefreshInterval !== 0) {
         const refreshInterval = Math.max(
@@ -63,11 +65,9 @@ Module.register("MMM-kudos", {
           this.refreshMinimumDelay
         ) * 60 * 1000;
         setInterval(async () => {
-          const response = await this.loadKudoFile();
-          if (response) {
-            this.kudos_new = JSON.parse(response);
-          } else {
-            Log.error(`${this.name} remoteFile refresh failed`);
+          const kudos = await this.loadKudoFile();
+          if (kudos) {
+            this.kudos_new = kudos;
           }
         }, refreshInterval);
       }
@@ -153,8 +153,10 @@ Module.register("MMM-kudos", {
   },
 
   /**
-   * Retrieve a file from the local filesystem
-   * @returns {Promise} Resolved when the file is loaded
+   * Load and parse the kudos file given by `remoteFile` (local path or URL).
+   * Never throws: any failure (network error, HTTP error status, invalid
+   * JSON, JSON that is not an object) is logged and reported as `null`.
+   * @returns {Promise<object|null>} the parsed kudos object, or null on failure
    */
   loadKudoFile: async function () {
     const isRemote = this.config.remoteFile.indexOf("http://") === 0
@@ -162,8 +164,21 @@ Module.register("MMM-kudos", {
     const url = isRemote
       ? this.config.remoteFile
       : this.file(this.config.remoteFile);
-    const response = await fetch(url);
-    return await response.text();
+
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`HTTP status ${response.status}`);
+      }
+      const kudos = JSON.parse(await response.text());
+      if (kudos === null || typeof kudos !== "object" || Array.isArray(kudos)) {
+        throw new Error("content is not a kudos object");
+      }
+      return kudos;
+    } catch (error) {
+      Log.error(`${this.name}: failed to load remoteFile "${url}": ${error.message}`);
+      return null;
+    }
   },
 
   /**

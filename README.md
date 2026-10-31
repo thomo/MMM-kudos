@@ -58,7 +58,7 @@ Then add the following configuration block to the `modules` array in your `confi
 | `kudos`	         | The list of kudos. <br><br> **Possible values:** An object with arrays - the keys are defined in the values of the _hourmap object_ plus the default array `anytime`, weather names, and regex dates. See [Kudos Configuration Example](#kudos-configuration-example). <br><br> **Default value:** [MMM-kudos.js](MMM-kudos.js).|
 | `random`         | Choose kudo randomly (`true`) or sequential (`false`).<br> <br> **Default value:** `true`|
 | `remoteFile`     | External file from which to load the kudos. <br><br> **Possible values:** Path or URL (starting with http:// or https://) to a JSON file containing kudos, structured as per the _kudos configuration_.<br> **Default value:** `null` (Do not load from file)|
-| `remoteFileRefreshInterval` | How often to reload the remote file, if remoteFile is specified. (minutes)<br><br> **Default value:** `0` (no refresh)<br>**Minimum value:** `15` (non-zero values below `15` are raised to `15`) |
+| `remoteFileRefreshInterval` | How often to reload the remote file, if remoteFile is specified. (minutes)<br><br> **Default value:** `0` (no refresh)<br>**Minimum value:** `15` (non-zero values below `15` are raised to `15`)<br><br>**Note:** Short intervals mean frequent fetches of `remoteFile`; for a URL, choose an interval the server can handle. |
 | `shrinkLimit`    | The kudo length at which a smaller font is used to display the kudo. Example: `35`.|
 | `shrinkClasses`  | *Optional* CSS classes used to style the shrunk kudo. Example: `"small dimmed"`.|
 | `updateInterval` | Defines how often the kudo changes. (Milliseconds) <br><br> **Possible values:** `1000` - `86400000` <br> **Default value:** `30000` (30 seconds)|
