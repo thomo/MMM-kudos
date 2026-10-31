@@ -38,7 +38,6 @@ Module.register("MMM-kudos", {
   // Set currentweather from module
   currentWeatherType: "",
   requiresVersion: "2.1.0", // Required version of MagicMirror
-  kudos_new: null,
 
   // Define required scripts.
   getScripts: function () {
@@ -63,19 +62,35 @@ Module.register("MMM-kudos", {
       const refreshDelay = this.remoteFileRefreshDelay();
       if (refreshDelay !== null) {
         setInterval(async () => {
+          // the new kudos are shown with the next scheduled update
           const kudos = await this.loadKudoFile();
           if (kudos) {
-            this.kudos_new = kudos;
+            this.setKudos(kudos);
           }
         }, refreshDelay);
       }
 
       const kudos = await this.loadKudoFile();
-      if (kudos) {
-        this.config.kudos = kudos;
+      if (kudos && this.setKudos(kudos)) {
         this.updateDom();
       }
     }
+  },
+
+  /**
+   * Replace the kudos, if they differ from the current ones. Resets the
+   * random and sequential positions, as they refer to the old kudo list.
+   * @param {object} kudos the new kudos object
+   * @returns {boolean} true if the kudos were replaced
+   */
+  setKudos: function (kudos) {
+    if (JSON.stringify(this.config.kudos) === JSON.stringify(kudos)) {
+      return false;
+    }
+    this.config.kudos = kudos;
+    this.lastIndexUsed = -1;
+    this.lastKudoIndex = -1;
+    return true;
   },
 
   /**
@@ -248,15 +263,6 @@ Module.register("MMM-kudos", {
       wrapper.appendChild(kudo);
     }
 
-    // if a new set of kudos was loaded from the refresh task
-    if (this.kudos_new) {
-      // did is change?
-      if (JSON.stringify(this.config.kudos) !== JSON.stringify(this.kudos_new)) {
-        this.config.kudos = this.kudos_new;
-        this.lastIndexUsed = -1;
-      }
-      this.kudos_new = null;
-    }
     return wrapper;
   },
 

@@ -4,6 +4,7 @@
 - change: drop the 15 minute minimum of `remoteFileRefreshInterval`; any positive number of minutes is used as is
 - fix: invalid `remoteFileRefreshInterval` values (non-numeric, negative) no longer cause a tight refresh loop; the refresh is disabled and an error is logged
 - fix: a failing `remoteFile` load (network error, HTTP error status, invalid JSON) no longer stops the module; the error is logged, kudo rotation continues and a configured refresh retries the load
+- fix: refreshed `remoteFile` kudos are used from the next update on (previously one update later); random and sequential positions are reset when the kudos change
 
 ## 1.0.3 - 2026-10-15
 

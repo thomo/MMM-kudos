@@ -256,7 +256,51 @@ describe("MMM-kudos", () => {
       await jest.advanceTimersByTimeAsync(60 * 1000);
 
       expect(global.fetch).toHaveBeenCalledTimes(2);
-      expect(instance.kudos_new).toEqual(kudos);
+      expect(instance.config.kudos).toEqual(kudos);
+    });
+
+    test("start - refreshed kudos are used by the very next kudo selection", async () => {
+      const refreshed = { anytime: ["refreshed kudo"] };
+      instance.config.hourmap = {};
+      instance.config.random = false;
+      instance.config.remoteFile = "kudos.json";
+      instance.config.remoteFileRefreshInterval = 1;
+      global.fetch
+        .mockResolvedValueOnce(mockResponse(JSON.stringify({ anytime: ["first", "second"] })))
+        .mockResolvedValue(mockResponse(JSON.stringify(refreshed)));
+
+      await instance.start();
+      expect(instance.getRandomKudo()).toBe("first");
+
+      await jest.advanceTimersByTimeAsync(60 * 1000);
+
+      expect(instance.getRandomKudo()).toBe("refreshed kudo");
+    });
+  });
+
+  describe("setKudos", () => {
+    test("setKudos - replaces changed kudos and resets positions", () => {
+      instance.lastIndexUsed = 3;
+      instance.lastKudoIndex = 2;
+      const kudos = { anytime: ["new kudo"] };
+
+      expect(instance.setKudos(kudos)).toBe(true);
+
+      expect(instance.config.kudos).toBe(kudos);
+      expect(instance.lastIndexUsed).toBe(-1);
+      expect(instance.lastKudoIndex).toBe(-1);
+    });
+
+    test("setKudos - keeps kudos and positions when content is unchanged", () => {
+      const current = instance.config.kudos;
+      instance.lastIndexUsed = 3;
+      instance.lastKudoIndex = 2;
+
+      expect(instance.setKudos(JSON.parse(JSON.stringify(current)))).toBe(false);
+
+      expect(instance.config.kudos).toBe(current);
+      expect(instance.lastIndexUsed).toBe(3);
+      expect(instance.lastKudoIndex).toBe(2);
     });
   });
 });
