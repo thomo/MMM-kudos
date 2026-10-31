@@ -1,4 +1,4 @@
-## Unreleased
+## 1.0.4 - 2026-10-31
 
 - fix: add missing default `remoteFileRefreshInterval: 0`; without it the refresh timer got `NaN` as delay and re-fetched `remoteFile` in a tight loop, exhausting memory and crashing the renderer
 - change: drop the 15 minute minimum of `remoteFileRefreshInterval`; any positive number of minutes up to 35791 (about 24.8 days, the timer maximum) is used as is
