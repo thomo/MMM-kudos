@@ -117,6 +117,9 @@ Module.register("MMM-kudos", {
    * @returns {number} a random index of given array
    */
   randomKudoIndex: function (kudos) {
+    if (kudos.length === 0) {
+      return -1;
+    }
     if (kudos.length === 1) {
       return 0;
     }
@@ -160,28 +163,42 @@ Module.register("MMM-kudos", {
     const date = now.format("YYYY-MM-DD");
     let kudos = [];
 
-    var hourMapKey = this.hourMapKey(hour);
+    const hourMapKey = this.hourMapKey(hour);
 
     if (hourMapKey > -1) {
-      kudos = [...this.config.kudos[this.config.hourmap[hourMapKey]]];
+      kudos.push(...this.kudoSet(this.config.hourmap[hourMapKey]));
     }
 
     // Add kudos based on weather
-    if (this.currentWeatherType in this.config.kudos) {
-      Array.prototype.push.apply(kudos, this.config.kudos[this.currentWeatherType]);
+    if (this.currentWeatherType) {
+      kudos.push(...this.kudoSet(this.currentWeatherType));
     }
 
     // Add kudos for anytime
-    Array.prototype.push.apply(kudos, this.config.kudos.anytime);
+    kudos.push(...this.kudoSet("anytime"));
 
     // Add kudos for special days
-    for (let entry in this.config.kudos) {
+    for (const entry in this.config.kudos) {
       if (new RegExp(entry).test(date)) {
-        Array.prototype.push.apply(kudos, this.config.kudos[entry]);
+        kudos.push(...this.kudoSet(entry));
       }
     }
 
     return kudos;
+  },
+
+  /**
+   * Retrieve one set of kudos by its key. Missing sets, e.g. a set named in
+   * the hourmap but not defined in a `remoteFile`, and values that are not
+   * arrays are treated as empty sets.
+   * @param {string} key name of the kudo set
+   * @returns {string[]} the kudos of the set, or an empty array
+   */
+  kudoSet: function (key) {
+    const set = Object.hasOwn(this.config.kudos, key)
+      ? this.config.kudos[key]
+      : undefined;
+    return Array.isArray(set) ? set : [];
   },
 
   /**

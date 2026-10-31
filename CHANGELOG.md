@@ -5,6 +5,8 @@
 - fix: invalid `remoteFileRefreshInterval` values (non-numeric, negative) no longer cause a tight refresh loop; the refresh is disabled and an error is logged
 - fix: a failing `remoteFile` load (network error, HTTP error status, invalid JSON) no longer stops the module; the error is logged, kudo rotation continues and a configured refresh retries the load
 - fix: refreshed `remoteFile` kudos are used from the next update on (previously one update later); random and sequential positions are reset when the kudos change
+- fix: kudo sets that are missing (e.g. a set named in `hourmap` but not defined in `remoteFile`) or are not arrays are treated as empty instead of crashing the module
+- fix: an empty kudo list no longer hangs the module in random mode
 
 ## 1.0.3 - 2026-10-15
 

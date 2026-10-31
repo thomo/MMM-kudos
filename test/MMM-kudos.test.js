@@ -91,6 +91,86 @@ describe("MMM-kudos", () => {
       const secondIndex = instance.randomKudoIndex(kudos);
       expect(secondIndex).not.toBe(firstIndex);
     });
+
+    test("randomKudoIndex - returns -1 for an empty array without hanging", () => {
+      instance.lastKudoIndex = 0;
+      expect(instance.randomKudoIndex([])).toBe(-1);
+    });
+  });
+
+  describe("kudoArray", () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+      // 2026-10-31 11:30 local time -> hourmap key 11 ("lunch")
+      jest.setSystemTime(new Date(2026, 9, 31, 11, 30));
+      instance.config.hourmap = { 5: "morning", 11: "lunch" };
+    });
+
+    test("kudoArray - combines hour, weather, anytime and date kudos", () => {
+      instance.currentWeatherType = "rain";
+      instance.config.kudos = {
+        "morning": ["morning kudo"],
+        "lunch": ["lunch kudo"],
+        "rain": ["rain kudo"],
+        "anytime": ["anytime kudo"],
+        "....-10-31": ["halloween kudo"],
+        "....-12-24": ["christmas kudo"],
+      };
+
+      expect(instance.kudoArray()).toEqual([
+        "lunch kudo",
+        "rain kudo",
+        "anytime kudo",
+        "halloween kudo",
+      ]);
+    });
+
+    test("kudoArray - set from hourmap missing in kudos does not throw", () => {
+      instance.config.kudos = { anytime: ["anytime kudo"] };
+
+      expect(instance.kudoArray()).toEqual(["anytime kudo"]);
+    });
+
+    test("kudoArray - non-array sets are ignored", () => {
+      instance.currentWeatherType = "rain";
+      instance.config.kudos = {
+        "lunch": "not an array",
+        "rain": { text: "not an array" },
+        "anytime": null,
+        "....-10-31": 5,
+      };
+
+      expect(instance.kudoArray()).toEqual([]);
+    });
+
+    test("kudoArray - does not mutate the configured sets", () => {
+      instance.config.kudos = {
+        lunch: ["lunch kudo"],
+        anytime: ["anytime kudo"],
+      };
+
+      instance.kudoArray();
+
+      expect(instance.config.kudos.lunch).toEqual(["lunch kudo"]);
+    });
+  });
+
+  describe("getRandomKudo", () => {
+    beforeEach(() => {
+      instance.config.hourmap = {};
+      instance.config.kudos = { anytime: [] };
+    });
+
+    test("getRandomKudo - random mode returns empty string for no kudos", () => {
+      instance.config.random = true;
+      instance.lastKudoIndex = 0;
+      expect(instance.getRandomKudo()).toBe("");
+    });
+
+    test("getRandomKudo - sequential mode returns empty string for no kudos", () => {
+      instance.config.random = false;
+      expect(instance.getRandomKudo()).toBe("");
+    });
   });
 
   describe("loadKudoFile", () => {
