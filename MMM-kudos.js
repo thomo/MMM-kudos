@@ -28,7 +28,7 @@ Module.register("MMM-kudos", {
       23: "night",
     },
     remoteFile: null,
-    // minutes; 0 = no refresh, otherwise values below refreshMinimumDelay (15) are raised to 15
+    // minutes; 0 = no refresh
     remoteFileRefreshInterval: 0,
     random: true,
     shrinkLimit: 35,
@@ -38,8 +38,11 @@ Module.register("MMM-kudos", {
   // Set currentweather from module
   currentWeatherType: "",
   requiresVersion: "2.1.0", // Required version of MagicMirror
-  refreshMinimumDelay: 15, // minutes
-  kudos_new: null,
+  // Largest delay setInterval/setTimeout can handle (2^31 - 1 ms, ~24.8 days);
+  // larger values overflow and make the timer fire immediately.
+  maxTimerDelay: 2147483647,
+  // A remoteFile load taking longer than this is aborted (ms).
+  remoteFileTimeout: 30000,
 
   // Define required scripts.
   getScripts: function () {
@@ -47,36 +50,92 @@ Module.register("MMM-kudos", {
   },
 
   // Define start sequence.
-  start: async function () {
+  start: function () {
     Log.info(`Starting module: ${this.name}`);
 
     this.lastKudoIndex = -1;
 
-    if (this.config.remoteFile !== null) {
-      const response = await this.loadKudoFile();
-      this.config.kudos = JSON.parse(response);
-      this.updateDom();
-
-      if (this.config.remoteFileRefreshInterval !== 0) {
-        const refreshInterval = Math.max(
-          this.config.remoteFileRefreshInterval,
-          this.refreshMinimumDelay
-        ) * 60 * 1000;
-        setInterval(async () => {
-          const response = await this.loadKudoFile();
-          if (response) {
-            this.kudos_new = JSON.parse(response);
-          } else {
-            Log.error(`${this.name} remoteFile refresh failed`);
-          }
-        }, refreshInterval);
-      }
-    }
-
-    // Schedule update timer.
+    const updateDelay = this.timerDelay("updateInterval", this.config.updateInterval, 1)
+      ?? this.defaults.updateInterval;
     setInterval(() => {
       this.updateDom(this.config.fadeSpeed);
-    }, this.config.updateInterval);
+    }, updateDelay);
+
+    if (this.config.remoteFile !== null) {
+      this.refreshDelay = this.remoteFileRefreshDelay();
+      // Not awaited: MagicMirror waits for start() of all modules before it
+      // renders anything, so a slow remoteFile must not block start().
+      this.reloadKudos(true);
+    }
+  },
+
+  /**
+   * Load `remoteFile` and apply its kudos. If a refresh is configured, the
+   * next load is scheduled only after this one has finished, so loads never
+   * overlap and an older response can never overwrite a newer one. A failed
+   * load (including the initial one) is retried by the next refresh.
+   * @param {boolean} redraw whether to redraw immediately when the kudos
+   *   changed; otherwise they are shown with the next scheduled update
+   * @returns {Promise<void>} resolved when the load is finished
+   */
+  reloadKudos: async function (redraw) {
+    const kudos = await this.loadKudoFile();
+    if (kudos && this.setKudos(kudos) && redraw) {
+      this.updateDom();
+    }
+    if (this.refreshDelay !== null) {
+      setTimeout(() => this.reloadKudos(false), this.refreshDelay);
+    }
+  },
+
+  /**
+   * Replace the kudos, if they differ from the current ones. Resets the
+   * random and sequential positions, as they refer to the old kudo list.
+   * @param {object} kudos the new kudos object
+   * @returns {boolean} true if the kudos were replaced
+   */
+  setKudos: function (kudos) {
+    if (JSON.stringify(this.config.kudos) === JSON.stringify(kudos)) {
+      return false;
+    }
+    this.config.kudos = kudos;
+    this.lastIndexUsed = -1;
+    this.lastKudoIndex = -1;
+    return true;
+  },
+
+  /**
+   * Delay between two reloads of `remoteFile`, derived from
+   * `remoteFileRefreshInterval` (minutes).
+   * @returns {number|null} delay in milliseconds, or null if no refresh is
+   *   configured (0) or the configured value is invalid (logged)
+   */
+  remoteFileRefreshDelay: function () {
+    const minutes = this.config.remoteFileRefreshInterval;
+    if (minutes === 0) {
+      return null;
+    }
+    return this.timerDelay("remoteFileRefreshInterval", minutes, 60 * 1000);
+  },
+
+  /**
+   * Convert a configured timer interval to a delay usable by
+   * setInterval/setTimeout. Values that are not numbers, or whose delay is
+   * below 1 ms or above `maxTimerDelay`, would make the timer fire in a tight
+   * loop; they are rejected and logged.
+   * @param {string} option name of the config option, for the log message
+   * @param {*} value configured value
+   * @param {number} unitMs milliseconds per unit of the value
+   * @returns {number|null} delay in milliseconds, or null if invalid
+   */
+  timerDelay: function (option, value, unitMs) {
+    const delay = Number.isFinite(value) ? value * unitMs : NaN;
+    if (delay >= 1 && delay <= this.maxTimerDelay) {
+      return delay;
+    }
+    const shown = typeof value === "number" ? value : JSON.stringify(value) ?? String(value);
+    Log.error(`${this.name}: invalid ${option} ${shown} (expected a number giving a delay from 1 ms to about 24.8 days), ignored`);
+    return null;
   },
 
   /**
@@ -85,6 +144,9 @@ Module.register("MMM-kudos", {
    * @returns {number} a random index of given array
    */
   randomKudoIndex: function (kudos) {
+    if (kudos.length === 0) {
+      return -1;
+    }
     if (kudos.length === 1) {
       return 0;
     }
@@ -128,24 +190,24 @@ Module.register("MMM-kudos", {
     const date = now.format("YYYY-MM-DD");
     let kudos = [];
 
-    var hourMapKey = this.hourMapKey(hour);
+    const hourMapKey = this.hourMapKey(hour);
 
     if (hourMapKey > -1) {
-      kudos = [...this.config.kudos[this.config.hourmap[hourMapKey]]];
+      kudos.push(...this.kudoSet(this.config.hourmap[hourMapKey]));
     }
 
     // Add kudos based on weather
-    if (this.currentWeatherType in this.config.kudos) {
-      Array.prototype.push.apply(kudos, this.config.kudos[this.currentWeatherType]);
+    if (this.currentWeatherType) {
+      kudos.push(...this.kudoSet(this.currentWeatherType));
     }
 
     // Add kudos for anytime
-    Array.prototype.push.apply(kudos, this.config.kudos.anytime);
+    kudos.push(...this.kudoSet("anytime"));
 
     // Add kudos for special days
-    for (let entry in this.config.kudos) {
-      if (new RegExp(entry).test(date)) {
-        Array.prototype.push.apply(kudos, this.config.kudos[entry]);
+    for (const entry in this.config.kudos) {
+      if (this.dateKeyMatches(entry, date)) {
+        kudos.push(...this.kudoSet(entry));
       }
     }
 
@@ -153,8 +215,46 @@ Module.register("MMM-kudos", {
   },
 
   /**
-   * Retrieve a file from the local filesystem
-   * @returns {Promise} Resolved when the file is loaded
+   * Test whether a kudos key, read as a regular expression, matches a date.
+   * Keys that are no valid regular expression never match; each of them is
+   * logged once.
+   * @param {string} key kudos key, e.g. "....-12-24"
+   * @param {string} date date formatted as YYYY-MM-DD
+   * @returns {boolean} true if the key matches the date
+   */
+  dateKeyMatches: function (key, date) {
+    try {
+      return new RegExp(key).test(date);
+    } catch (error) {
+      this.invalidDateKeys ??= new Set();
+      if (!this.invalidDateKeys.has(key)) {
+        this.invalidDateKeys.add(key);
+        Log.error(`${this.name}: ignoring kudos key "${key}" for date matching: ${error.message}`);
+      }
+      return false;
+    }
+  },
+
+  /**
+   * Retrieve one set of kudos by its key. Missing sets, e.g. a set named in
+   * the hourmap but not defined in a `remoteFile`, and values that are not
+   * arrays are treated as empty sets.
+   * @param {string} key name of the kudo set
+   * @returns {string[]} the kudos of the set, or an empty array
+   */
+  kudoSet: function (key) {
+    const set = Object.hasOwn(this.config.kudos, key)
+      ? this.config.kudos[key]
+      : undefined;
+    return Array.isArray(set) ? set : [];
+  },
+
+  /**
+   * Load and parse the kudos file given by `remoteFile` (local path or URL).
+   * Never throws: any failure (network error, no response within
+   * `remoteFileTimeout`, HTTP error status, invalid
+   * JSON, JSON that is not an object) is logged and reported as `null`.
+   * @returns {Promise<object|null>} the parsed kudos object, or null on failure
    */
   loadKudoFile: async function () {
     const isRemote = this.config.remoteFile.indexOf("http://") === 0
@@ -162,8 +262,26 @@ Module.register("MMM-kudos", {
     const url = isRemote
       ? this.config.remoteFile
       : this.file(this.config.remoteFile);
-    const response = await fetch(url);
-    return await response.text();
+
+    try {
+      const response = await fetch(url, {
+        signal: AbortSignal.timeout(this.remoteFileTimeout),
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP status ${response.status}`);
+      }
+      const kudos = JSON.parse(await response.text());
+      if (kudos === null || typeof kudos !== "object" || Array.isArray(kudos)) {
+        throw new Error("content is not a kudos object");
+      }
+      return kudos;
+    } catch (error) {
+      const reason = error.name === "TimeoutError"
+        ? `no response within ${this.remoteFileTimeout / 1000} s`
+        : error.message;
+      Log.error(`${this.name}: failed to load remoteFile "${url}": ${reason}`);
+      return null;
+    }
   },
 
   /**
@@ -216,15 +334,6 @@ Module.register("MMM-kudos", {
       wrapper.appendChild(kudo);
     }
 
-    // if a new set of kudos was loaded from the refresh task
-    if (this.kudos_new) {
-      // did is change?
-      if (JSON.stringify(this.config.kudos) !== JSON.stringify(this.kudos_new)) {
-        this.config.kudos = this.kudos_new;
-        this.lastIndexUsed = -1;
-      }
-      this.kudos_new = null;
-    }
     return wrapper;
   },
 

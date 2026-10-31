@@ -1,6 +1,6 @@
 {
   "name": "mmm-kudos",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "MMM-kudos is a module for MagicMirror² that displays a random kudo message from a predefined set. The module allows you to define different sets of kudos based on the current hour and current date.",
   "main": "MMM-kudos.js",
   "author": "Thomas Mohaupt",
