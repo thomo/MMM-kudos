@@ -28,7 +28,7 @@ Module.register("MMM-kudos", {
       23: "night",
     },
     remoteFile: null,
-    // minutes; 0 = no refresh, otherwise values below refreshMinimumDelay (15) are raised to 15
+    // minutes; 0 = no refresh
     remoteFileRefreshInterval: 0,
     random: true,
     shrinkLimit: 35,
@@ -38,7 +38,6 @@ Module.register("MMM-kudos", {
   // Set currentweather from module
   currentWeatherType: "",
   requiresVersion: "2.1.0", // Required version of MagicMirror
-  refreshMinimumDelay: 15, // minutes
   kudos_new: null,
 
   // Define required scripts.
@@ -52,31 +51,49 @@ Module.register("MMM-kudos", {
 
     this.lastKudoIndex = -1;
 
-    if (this.config.remoteFile !== null) {
-      const kudos = await this.loadKudoFile();
-      if (kudos) {
-        this.config.kudos = kudos;
-        this.updateDom();
-      }
+    // Schedule update timer first, so the module keeps rotating kudos
+    // regardless of what happens while loading the remote file.
+    setInterval(() => {
+      this.updateDom(this.config.fadeSpeed);
+    }, this.config.updateInterval);
 
-      if (this.config.remoteFileRefreshInterval !== 0) {
-        const refreshInterval = Math.max(
-          this.config.remoteFileRefreshInterval,
-          this.refreshMinimumDelay
-        ) * 60 * 1000;
+    if (this.config.remoteFile !== null) {
+      // Schedule the refresh before the initial load, so a failed initial
+      // load is retried by the refresh.
+      const refreshDelay = this.remoteFileRefreshDelay();
+      if (refreshDelay !== null) {
         setInterval(async () => {
           const kudos = await this.loadKudoFile();
           if (kudos) {
             this.kudos_new = kudos;
           }
-        }, refreshInterval);
+        }, refreshDelay);
+      }
+
+      const kudos = await this.loadKudoFile();
+      if (kudos) {
+        this.config.kudos = kudos;
+        this.updateDom();
       }
     }
+  },
 
-    // Schedule update timer.
-    setInterval(() => {
-      this.updateDom(this.config.fadeSpeed);
-    }, this.config.updateInterval);
+  /**
+   * Delay between two reloads of `remoteFile`, derived from
+   * `remoteFileRefreshInterval` (minutes).
+   * @returns {number|null} delay in milliseconds, or null if no refresh is
+   *   configured (0) or the configured value is not a positive number
+   */
+  remoteFileRefreshDelay: function () {
+    const minutes = this.config.remoteFileRefreshInterval;
+    if (minutes === 0) {
+      return null;
+    }
+    if (typeof minutes !== "number" || !Number.isFinite(minutes) || minutes < 0) {
+      Log.error(`${this.name}: invalid remoteFileRefreshInterval "${minutes}" (expected minutes as a positive number), refresh disabled`);
+      return null;
+    }
+    return minutes * 60 * 1000;
   },
 
   /**

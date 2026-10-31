@@ -1,6 +1,9 @@
 ## Unreleased
 
 - fix: add missing default `remoteFileRefreshInterval: 0`; without it the refresh timer got `NaN` as delay and re-fetched `remoteFile` in a tight loop, exhausting memory and crashing the renderer
+- change: drop the 15 minute minimum of `remoteFileRefreshInterval`; any positive number of minutes is used as is
+- fix: invalid `remoteFileRefreshInterval` values (non-numeric, negative) no longer cause a tight refresh loop; the refresh is disabled and an error is logged
+- fix: a failing `remoteFile` load (network error, HTTP error status, invalid JSON) no longer stops the module; the error is logged, kudo rotation continues and a configured refresh retries the load
 
 ## 1.0.3 - 2026-10-15
 

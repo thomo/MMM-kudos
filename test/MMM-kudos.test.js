@@ -148,4 +148,115 @@ describe("MMM-kudos", () => {
       expect(Log.error).toHaveBeenCalledTimes(1);
     });
   });
+
+  describe("remoteFileRefreshDelay", () => {
+    test("remoteFileRefreshDelay - 0 means no refresh", () => {
+      instance.config.remoteFileRefreshInterval = 0;
+      expect(instance.remoteFileRefreshDelay()).toBeNull();
+      expect(Log.error).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      [15, 15 * 60 * 1000],
+      [1, 60 * 1000],
+      [0.5, 30 * 1000],
+    ])("remoteFileRefreshDelay - %p minutes are used as is (no minimum)", (minutes, expected) => {
+      instance.config.remoteFileRefreshInterval = minutes;
+      expect(instance.remoteFileRefreshDelay()).toBe(expected);
+    });
+
+    test.each([
+      ["30min"],
+      ["30"],
+      [undefined],
+      [null],
+      [-5],
+      [NaN],
+      [Infinity],
+      [{}],
+    ])("remoteFileRefreshDelay - invalid value %p disables refresh and logs", (value) => {
+      instance.config.remoteFileRefreshInterval = value;
+      expect(instance.remoteFileRefreshDelay()).toBeNull();
+      expect(Log.error).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("start", () => {
+    const kudos = { anytime: ["remote kudo"] };
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+      jest.spyOn(global, "setInterval");
+    });
+
+    const delays = () => setInterval.mock.calls.map(call => call[1]);
+
+    test("start - without remoteFile only the update timer is scheduled", async () => {
+      await instance.start();
+
+      expect(delays()).toEqual([instance.config.updateInterval]);
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    test("start - remoteFile without refresh interval loads once, no refresh timer", async () => {
+      instance.config.remoteFile = "kudos.json";
+      global.fetch.mockResolvedValue(mockResponse(JSON.stringify(kudos)));
+
+      await instance.start();
+
+      expect(delays()).toEqual([instance.config.updateInterval]);
+      expect(instance.config.kudos).toEqual(kudos);
+      expect(instance.updateDom).toHaveBeenCalledTimes(1);
+    });
+
+    test("start - every scheduled delay is a finite positive number", async () => {
+      instance.config.remoteFile = "kudos.json";
+      instance.config.remoteFileRefreshInterval = 20;
+      global.fetch.mockResolvedValue(mockResponse(JSON.stringify(kudos)));
+
+      await instance.start();
+
+      expect(delays()).toEqual([instance.config.updateInterval, 20 * 60 * 1000]);
+      for (const delay of delays()) {
+        expect(Number.isFinite(delay) && delay > 0).toBe(true);
+      }
+    });
+
+    test("start - invalid refresh interval schedules no refresh timer", async () => {
+      instance.config.remoteFile = "kudos.json";
+      instance.config.remoteFileRefreshInterval = "30min";
+      global.fetch.mockResolvedValue(mockResponse(JSON.stringify(kudos)));
+
+      await instance.start();
+
+      expect(delays()).toEqual([instance.config.updateInterval]);
+    });
+
+    test("start - failed initial load keeps defaults and still schedules timers", async () => {
+      const defaultKudos = instance.config.kudos;
+      instance.config.remoteFile = "https://example.com/kudos.json";
+      instance.config.remoteFileRefreshInterval = 1;
+      global.fetch.mockRejectedValue(new TypeError("Failed to fetch"));
+
+      await expect(instance.start()).resolves.toBeUndefined();
+
+      expect(delays()).toEqual([instance.config.updateInterval, 60 * 1000]);
+      expect(instance.config.kudos).toBe(defaultKudos);
+      expect(instance.updateDom).not.toHaveBeenCalled();
+    });
+
+    test("start - refresh retries after a failed initial load", async () => {
+      instance.config.remoteFile = "https://example.com/kudos.json";
+      instance.config.remoteFileRefreshInterval = 1;
+      global.fetch
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockResolvedValue(mockResponse(JSON.stringify(kudos)));
+
+      await instance.start();
+      await jest.advanceTimersByTimeAsync(60 * 1000);
+
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(instance.kudos_new).toEqual(kudos);
+    });
+  });
 });
