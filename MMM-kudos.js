@@ -38,6 +38,11 @@ Module.register("MMM-kudos", {
   // Set currentweather from module
   currentWeatherType: "",
   requiresVersion: "2.1.0", // Required version of MagicMirror
+  // Largest delay setInterval/setTimeout can handle (2^31 - 1 ms, ~24.8 days);
+  // larger values overflow and make the timer fire immediately.
+  maxTimerDelay: 2147483647,
+  // A remoteFile load taking longer than this is aborted (ms).
+  remoteFileTimeout: 30000,
 
   // Define required scripts.
   getScripts: function () {
@@ -45,35 +50,41 @@ Module.register("MMM-kudos", {
   },
 
   // Define start sequence.
-  start: async function () {
+  start: function () {
     Log.info(`Starting module: ${this.name}`);
 
     this.lastKudoIndex = -1;
 
-    // Schedule update timer first, so the module keeps rotating kudos
-    // regardless of what happens while loading the remote file.
+    const updateDelay = this.timerDelay("updateInterval", this.config.updateInterval, 1)
+      ?? this.defaults.updateInterval;
     setInterval(() => {
       this.updateDom(this.config.fadeSpeed);
-    }, this.config.updateInterval);
+    }, updateDelay);
 
     if (this.config.remoteFile !== null) {
-      // Schedule the refresh before the initial load, so a failed initial
-      // load is retried by the refresh.
-      const refreshDelay = this.remoteFileRefreshDelay();
-      if (refreshDelay !== null) {
-        setInterval(async () => {
-          // the new kudos are shown with the next scheduled update
-          const kudos = await this.loadKudoFile();
-          if (kudos) {
-            this.setKudos(kudos);
-          }
-        }, refreshDelay);
-      }
+      this.refreshDelay = this.remoteFileRefreshDelay();
+      // Not awaited: MagicMirror waits for start() of all modules before it
+      // renders anything, so a slow remoteFile must not block start().
+      this.reloadKudos(true);
+    }
+  },
 
-      const kudos = await this.loadKudoFile();
-      if (kudos && this.setKudos(kudos)) {
-        this.updateDom();
-      }
+  /**
+   * Load `remoteFile` and apply its kudos. If a refresh is configured, the
+   * next load is scheduled only after this one has finished, so loads never
+   * overlap and an older response can never overwrite a newer one. A failed
+   * load (including the initial one) is retried by the next refresh.
+   * @param {boolean} redraw whether to redraw immediately when the kudos
+   *   changed; otherwise they are shown with the next scheduled update
+   * @returns {Promise<void>} resolved when the load is finished
+   */
+  reloadKudos: async function (redraw) {
+    const kudos = await this.loadKudoFile();
+    if (kudos && this.setKudos(kudos) && redraw) {
+      this.updateDom();
+    }
+    if (this.refreshDelay !== null) {
+      setTimeout(() => this.reloadKudos(false), this.refreshDelay);
     }
   },
 
@@ -97,18 +108,34 @@ Module.register("MMM-kudos", {
    * Delay between two reloads of `remoteFile`, derived from
    * `remoteFileRefreshInterval` (minutes).
    * @returns {number|null} delay in milliseconds, or null if no refresh is
-   *   configured (0) or the configured value is not a positive number
+   *   configured (0) or the configured value is invalid (logged)
    */
   remoteFileRefreshDelay: function () {
     const minutes = this.config.remoteFileRefreshInterval;
     if (minutes === 0) {
       return null;
     }
-    if (typeof minutes !== "number" || !Number.isFinite(minutes) || minutes < 0) {
-      Log.error(`${this.name}: invalid remoteFileRefreshInterval "${minutes}" (expected minutes as a positive number), refresh disabled`);
-      return null;
+    return this.timerDelay("remoteFileRefreshInterval", minutes, 60 * 1000);
+  },
+
+  /**
+   * Convert a configured timer interval to a delay usable by
+   * setInterval/setTimeout. Values that are not numbers, or whose delay is
+   * below 1 ms or above `maxTimerDelay`, would make the timer fire in a tight
+   * loop; they are rejected and logged.
+   * @param {string} option name of the config option, for the log message
+   * @param {*} value configured value
+   * @param {number} unitMs milliseconds per unit of the value
+   * @returns {number|null} delay in milliseconds, or null if invalid
+   */
+  timerDelay: function (option, value, unitMs) {
+    const delay = Number.isFinite(value) ? value * unitMs : NaN;
+    if (delay >= 1 && delay <= this.maxTimerDelay) {
+      return delay;
     }
-    return minutes * 60 * 1000;
+    const shown = typeof value === "number" ? value : JSON.stringify(value) ?? String(value);
+    Log.error(`${this.name}: invalid ${option} ${shown} (expected a number giving a delay from 1 ms to about 24.8 days), ignored`);
+    return null;
   },
 
   /**
@@ -224,7 +251,8 @@ Module.register("MMM-kudos", {
 
   /**
    * Load and parse the kudos file given by `remoteFile` (local path or URL).
-   * Never throws: any failure (network error, HTTP error status, invalid
+   * Never throws: any failure (network error, no response within
+   * `remoteFileTimeout`, HTTP error status, invalid
    * JSON, JSON that is not an object) is logged and reported as `null`.
    * @returns {Promise<object|null>} the parsed kudos object, or null on failure
    */
@@ -236,7 +264,9 @@ Module.register("MMM-kudos", {
       : this.file(this.config.remoteFile);
 
     try {
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        signal: AbortSignal.timeout(this.remoteFileTimeout),
+      });
       if (!response.ok) {
         throw new Error(`HTTP status ${response.status}`);
       }
@@ -246,7 +276,10 @@ Module.register("MMM-kudos", {
       }
       return kudos;
     } catch (error) {
-      Log.error(`${this.name}: failed to load remoteFile "${url}": ${error.message}`);
+      const reason = error.name === "TimeoutError"
+        ? `no response within ${this.remoteFileTimeout / 1000} s`
+        : error.message;
+      Log.error(`${this.name}: failed to load remoteFile "${url}": ${reason}`);
       return null;
     }
   },

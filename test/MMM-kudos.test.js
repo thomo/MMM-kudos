@@ -23,6 +23,9 @@ const mockResponse = (body, { ok = true, status = 200 } = {}) => ({
   text: jest.fn().mockResolvedValue(body),
 });
 
+// Resolve pending promise chains (works with fake timers, uses the real setImmediate).
+const flushPromises = () => new Promise(jest.requireActual("timers").setImmediate);
+
 describe("MMM-kudos", () => {
   let instance;
 
@@ -195,7 +198,10 @@ describe("MMM-kudos", () => {
 
       await expect(instance.loadKudoFile()).resolves.toEqual(kudos);
       expect(instance.file).toHaveBeenCalledWith("kudos.json");
-      expect(global.fetch).toHaveBeenCalledWith("modules/MMM-kudos/kudos.json");
+      expect(global.fetch).toHaveBeenCalledWith(
+        "modules/MMM-kudos/kudos.json",
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      );
     });
 
     test("loadKudoFile - uses http(s) URLs as is", async () => {
@@ -204,7 +210,10 @@ describe("MMM-kudos", () => {
 
       await expect(instance.loadKudoFile()).resolves.toEqual(kudos);
       expect(instance.file).not.toHaveBeenCalled();
-      expect(global.fetch).toHaveBeenCalledWith("https://example.com/kudos.json");
+      expect(global.fetch).toHaveBeenCalledWith(
+        "https://example.com/kudos.json",
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      );
     });
 
     test("loadKudoFile - returns null and logs when fetch rejects", async () => {
@@ -213,6 +222,18 @@ describe("MMM-kudos", () => {
 
       await expect(instance.loadKudoFile()).resolves.toBeNull();
       expect(Log.error).toHaveBeenCalledTimes(1);
+    });
+
+    test("loadKudoFile - aborts and returns null when there is no response in time", async () => {
+      instance.config.remoteFile = "https://example.com/kudos.json";
+      instance.remoteFileTimeout = 20;
+      // a server that never answers: the request only ends when it is aborted
+      global.fetch.mockImplementation((url, { signal }) => new Promise((resolve, reject) => {
+        signal.addEventListener("abort", () => reject(signal.reason));
+      }));
+
+      await expect(instance.loadKudoFile()).resolves.toBeNull();
+      expect(Log.error).toHaveBeenCalledWith(expect.stringContaining("no response within 0.02 s"));
     });
 
     test("loadKudoFile - returns null and logs on HTTP error status", async () => {
@@ -242,6 +263,40 @@ describe("MMM-kudos", () => {
     });
   });
 
+  describe("timerDelay", () => {
+    test.each([
+      [1000, 1, 1000],
+      [1, 1, 1],
+      [2147483647, 1, 2147483647],
+      [15, 60 * 1000, 15 * 60 * 1000],
+      [0.5, 60 * 1000, 30 * 1000],
+    ])("timerDelay - %p with unit %p ms gives %p ms", (value, unitMs, expected) => {
+      expect(instance.timerDelay("option", value, unitMs)).toBe(expected);
+      expect(Log.error).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      [0, 1],
+      [0.5, 1],
+      [-1000, 1],
+      [2147483648, 1],
+      [3e9, 1],
+      [1e-6, 60 * 1000],
+      [35792, 60 * 1000],
+      [1e306, 60 * 1000],
+      [NaN, 1],
+      [Infinity, 1],
+      ["1000", 1],
+      [null, 1],
+      [undefined, 1],
+      [{}, 1],
+    ])("timerDelay - %p with unit %p ms is rejected and logged", (value, unitMs) => {
+      expect(instance.timerDelay("option", value, unitMs)).toBeNull();
+      expect(Log.error).toHaveBeenCalledTimes(1);
+      expect(Log.error).toHaveBeenCalledWith(expect.stringContaining("invalid option"));
+    });
+  });
+
   describe("remoteFileRefreshDelay", () => {
     test("remoteFileRefreshDelay - 0 means no refresh", () => {
       instance.config.remoteFileRefreshInterval = 0;
@@ -253,6 +308,7 @@ describe("MMM-kudos", () => {
       [15, 15 * 60 * 1000],
       [1, 60 * 1000],
       [0.5, 30 * 1000],
+      [35791, 35791 * 60 * 1000],
     ])("remoteFileRefreshDelay - %p minutes are used as is (no minimum)", (minutes, expected) => {
       instance.config.remoteFileRefreshInterval = minutes;
       expect(instance.remoteFileRefreshDelay()).toBe(expected);
@@ -267,6 +323,12 @@ describe("MMM-kudos", () => {
       [NaN],
       [Infinity],
       [{}],
+      // above 2^31 - 1 ms: would overflow the timer and fire immediately
+      [35792],
+      [43200],
+      [1e306],
+      // below 1 ms
+      [1e-6],
     ])("remoteFileRefreshDelay - invalid value %p disables refresh and logs", (value) => {
       instance.config.remoteFileRefreshInterval = value;
       expect(instance.remoteFileRefreshDelay()).toBeNull();
@@ -280,49 +342,98 @@ describe("MMM-kudos", () => {
     beforeEach(() => {
       jest.useFakeTimers();
       jest.spyOn(global, "setInterval");
+      jest.spyOn(global, "setTimeout");
     });
 
-    const delays = () => setInterval.mock.calls.map(call => call[1]);
+    const intervalDelays = () => setInterval.mock.calls.map(call => call[1]);
+    const refreshDelays = () => setTimeout.mock.calls.map(call => call[1]);
 
     test("start - without remoteFile only the update timer is scheduled", async () => {
-      await instance.start();
+      instance.start();
+      await flushPromises();
 
-      expect(delays()).toEqual([instance.config.updateInterval]);
+      expect(intervalDelays()).toEqual([30000]);
+      expect(refreshDelays()).toEqual([]);
       expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    test("start - does not wait for the initial load", () => {
+      instance.config.remoteFile = "https://example.com/kudos.json";
+      global.fetch.mockReturnValue(new Promise(() => {})); // never answers
+
+      expect(instance.start()).toBeUndefined();
+
+      expect(intervalDelays()).toEqual([30000]);
+      expect(global.fetch).toHaveBeenCalledTimes(1);
     });
 
     test("start - remoteFile without refresh interval loads once, no refresh timer", async () => {
       instance.config.remoteFile = "kudos.json";
       global.fetch.mockResolvedValue(mockResponse(JSON.stringify(kudos)));
 
-      await instance.start();
+      instance.start();
+      await flushPromises();
 
-      expect(delays()).toEqual([instance.config.updateInterval]);
+      expect(intervalDelays()).toEqual([30000]);
+      expect(refreshDelays()).toEqual([]);
       expect(instance.config.kudos).toEqual(kudos);
       expect(instance.updateDom).toHaveBeenCalledTimes(1);
     });
 
-    test("start - every scheduled delay is a finite positive number", async () => {
+    test("start - schedules the next refresh after the load has finished", async () => {
       instance.config.remoteFile = "kudos.json";
       instance.config.remoteFileRefreshInterval = 20;
       global.fetch.mockResolvedValue(mockResponse(JSON.stringify(kudos)));
 
-      await instance.start();
+      instance.start();
+      expect(refreshDelays()).toEqual([]);
+      await flushPromises();
 
-      expect(delays()).toEqual([instance.config.updateInterval, 20 * 60 * 1000]);
-      for (const delay of delays()) {
-        expect(Number.isFinite(delay) && delay > 0).toBe(true);
-      }
+      expect(refreshDelays()).toEqual([20 * 60 * 1000]);
     });
 
-    test("start - invalid refresh interval schedules no refresh timer", async () => {
+    test("start - refresh loads never overlap", async () => {
+      instance.config.remoteFile = "https://example.com/kudos.json";
+      instance.config.remoteFileRefreshInterval = 1;
+      global.fetch.mockReturnValue(new Promise(() => {})); // never answers
+
+      instance.start();
+      await jest.advanceTimersByTimeAsync(10 * 60 * 1000);
+
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    test("start - a slow older response cannot overwrite a newer one", async () => {
+      instance.config.remoteFile = "https://example.com/kudos.json";
+      instance.config.remoteFileRefreshInterval = 1;
+      let answerFirst;
+      global.fetch
+        .mockReturnValueOnce(new Promise((resolve) => { answerFirst = resolve; }))
+        .mockResolvedValue(mockResponse(JSON.stringify({ anytime: ["new"] })));
+
+      instance.start();
+      // the first load is still running: no refresh may start in the meantime
+      await jest.advanceTimersByTimeAsync(5 * 60 * 1000);
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+
+      answerFirst(mockResponse(JSON.stringify({ anytime: ["old"] })));
+      await flushPromises();
+      expect(instance.config.kudos).toEqual({ anytime: ["old"] });
+
+      await jest.advanceTimersByTimeAsync(60 * 1000);
+      expect(instance.config.kudos).toEqual({ anytime: ["new"] });
+    });
+
+    test("start - invalid refresh interval schedules no refresh", async () => {
       instance.config.remoteFile = "kudos.json";
-      instance.config.remoteFileRefreshInterval = "30min";
+      instance.config.remoteFileRefreshInterval = 43200; // above the timer maximum
       global.fetch.mockResolvedValue(mockResponse(JSON.stringify(kudos)));
 
-      await instance.start();
+      instance.start();
+      await flushPromises();
 
-      expect(delays()).toEqual([instance.config.updateInterval]);
+      expect(refreshDelays()).toEqual([]);
+      expect(Log.error).toHaveBeenCalledWith(expect.stringContaining("remoteFileRefreshInterval"));
     });
 
     test("start - failed initial load keeps defaults and still schedules timers", async () => {
@@ -331,9 +442,11 @@ describe("MMM-kudos", () => {
       instance.config.remoteFileRefreshInterval = 1;
       global.fetch.mockRejectedValue(new TypeError("Failed to fetch"));
 
-      await expect(instance.start()).resolves.toBeUndefined();
+      instance.start();
+      await flushPromises();
 
-      expect(delays()).toEqual([instance.config.updateInterval, 60 * 1000]);
+      expect(intervalDelays()).toEqual([30000]);
+      expect(refreshDelays()).toEqual([60 * 1000]);
       expect(instance.config.kudos).toBe(defaultKudos);
       expect(instance.updateDom).not.toHaveBeenCalled();
     });
@@ -345,7 +458,7 @@ describe("MMM-kudos", () => {
         .mockRejectedValueOnce(new TypeError("Failed to fetch"))
         .mockResolvedValue(mockResponse(JSON.stringify(kudos)));
 
-      await instance.start();
+      instance.start();
       await jest.advanceTimersByTimeAsync(60 * 1000);
 
       expect(global.fetch).toHaveBeenCalledTimes(2);
@@ -362,12 +475,38 @@ describe("MMM-kudos", () => {
         .mockResolvedValueOnce(mockResponse(JSON.stringify({ anytime: ["first", "second"] })))
         .mockResolvedValue(mockResponse(JSON.stringify(refreshed)));
 
-      await instance.start();
+      instance.start();
+      await flushPromises();
       expect(instance.getRandomKudo()).toBe("first");
 
       await jest.advanceTimersByTimeAsync(60 * 1000);
 
       expect(instance.getRandomKudo()).toBe("refreshed kudo");
+    });
+
+    test.each([
+      ["30s"],
+      [0],
+      [-1],
+      [null],
+      [undefined],
+      [3e9],
+    ])("start - invalid updateInterval %p falls back to the default and logs", async (value) => {
+      instance.config.updateInterval = value;
+
+      instance.start();
+
+      expect(intervalDelays()).toEqual([30000]);
+      expect(Log.error).toHaveBeenCalledWith(expect.stringContaining("updateInterval"));
+    });
+
+    test("start - valid updateInterval is used as is", () => {
+      instance.config.updateInterval = 1000;
+
+      instance.start();
+
+      expect(intervalDelays()).toEqual([1000]);
+      expect(Log.error).not.toHaveBeenCalled();
     });
   });
 
