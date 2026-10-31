@@ -1,3 +1,11 @@
+## Unreleased
+
+- fix: sequential mode (`random: false`) no longer stays on the first kudo after one pass; it starts over with the first kudo after the last one
+- fix: kudos that are no strings (e.g. `42`, `null`) are skipped instead of crashing the module
+- fix: `kudos` that is no object (e.g. `null`) no longer crashes the module on every update
+- fix: an `hourmap` without an integer hour key from 0 to 24 (e.g. `{ "05": "morning" }`) no longer hangs the module; no hour set is used then
+- fix: a `remoteFile` that is no string (e.g. `false`, `42`) is ignored and logged instead of crashing the module; `undefined` and `""` mean no file, like `null`
+
 ## 1.0.4 - 2026-10-31
 
 - fix: add missing default `remoteFileRefreshInterval: 0`; without it the refresh timer got `NaN` as delay and re-fetched `remoteFile` in a tight loop, exhausting memory and crashing the renderer

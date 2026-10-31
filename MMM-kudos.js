@@ -61,12 +61,28 @@ Module.register("MMM-kudos", {
       this.updateDom(this.config.fadeSpeed);
     }, updateDelay);
 
-    if (this.config.remoteFile !== null) {
+    if (this.hasRemoteFile()) {
       this.refreshDelay = this.remoteFileRefreshDelay();
       // Not awaited: MagicMirror waits for start() of all modules before it
       // renders anything, so a slow remoteFile must not block start().
       this.reloadKudos(true);
     }
+  },
+
+  /**
+   * Whether a `remoteFile` is configured. `null`, `undefined` and `""` mean no
+   * file; any other value that is not a string is logged and ignored as well.
+   * @returns {boolean} true if `remoteFile` is a non-empty string
+   */
+  hasRemoteFile: function () {
+    const file = this.config.remoteFile;
+    if (typeof file === "string" && file !== "") {
+      return true;
+    }
+    if (file != null && file !== "") {
+      Log.error(`${this.name}: invalid remoteFile ${JSON.stringify(file) ?? String(file)} (expected a path or URL), ignored`);
+    }
+    return false;
   },
 
   /**
@@ -166,18 +182,27 @@ Module.register("MMM-kudos", {
     return kudoIndex;
   },
 
+  /**
+   * Find the hourmap key valid at a given hour: the latest hour key at or
+   * before `hour`, or, before the first key of the day, the last key of the
+   * previous day. Only the integers 0 to 24 are hour keys.
+   * @param {number} hour hour of the day (0-23)
+   * @returns {number} the hour key, or -1 if the hourmap has no hour key
+   */
   hourMapKey: function (hour) {
-    if (this.config.hourmap == null
-      || Object.keys(this.config.hourmap).length === 0
-    ) {
+    const hourmap = this.config.hourmap;
+    if (hourmap === null || typeof hourmap !== "object") {
       return -1;
     }
 
-    while (!(hour in this.config.hourmap) && hour > -1) {
-      hour = hour - 1;
+    // hour, hour - 1, ..., 0, 24, 23, ..., hour + 1
+    for (let offset = 0; offset < 25; offset++) {
+      const key = (hour - offset + 25) % 25;
+      if (Object.hasOwn(hourmap, key)) {
+        return key;
+      }
     }
-
-    return hour < 0 ? this.hourMapKey(24) : hour;
+    return -1;
   },
 
   /**
@@ -238,15 +263,16 @@ Module.register("MMM-kudos", {
   /**
    * Retrieve one set of kudos by its key. Missing sets, e.g. a set named in
    * the hourmap but not defined in a `remoteFile`, and values that are not
-   * arrays are treated as empty sets.
+   * arrays are treated as empty sets. Kudos that are not strings are skipped.
    * @param {string} key name of the kudo set
    * @returns {string[]} the kudos of the set, or an empty array
    */
   kudoSet: function (key) {
-    const set = Object.hasOwn(this.config.kudos, key)
-      ? this.config.kudos[key]
+    const kudos = this.config.kudos;
+    const set = kudos !== null && typeof kudos === "object" && Object.hasOwn(kudos, key)
+      ? kudos[key]
       : undefined;
-    return Array.isArray(set) ? set : [];
+    return Array.isArray(set) ? set.filter(kudo => typeof kudo === "string") : [];
   },
 
   /**
@@ -299,8 +325,12 @@ Module.register("MMM-kudos", {
       index = this.randomKudoIndex(kudos);
     } else {
       // no, sequential
-      // if doing sequential, don't fall off the end
-      index = this.lastIndexUsed >= kudos.length - 1 ? 0 : ++this.lastIndexUsed;
+      if (kudos.length === 0) {
+        return "";
+      }
+      // continue with the next kudo, after the last one start over
+      index = this.lastIndexUsed + 1 < kudos.length ? this.lastIndexUsed + 1 : 0;
+      this.lastIndexUsed = index;
     }
 
     return kudos[index] || "";

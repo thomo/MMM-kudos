@@ -80,6 +80,21 @@ describe("MMM-kudos", () => {
     test("hourMapKey - when hour when it is before first defined hour", () => {
       expect(instance.hourMapKey(3)).toBe(20);
     });
+
+    test("hourMapKey - key 24 is used before the first defined hour", () => {
+      instance.config.hourmap = { 5: "morning", 24: "night" };
+      expect(instance.hourMapKey(3)).toBe(24);
+    });
+
+    test("hourMapKey - returns -1 without hanging when no key is an hour 0-24", () => {
+      instance.config.hourmap = { "05": "morning", "morning": 5, "25": "never" };
+      expect(instance.hourMapKey(6)).toBe(-1);
+    });
+
+    test("hourMapKey - returns -1 when hourmap is not an object", () => {
+      instance.config.hourmap = "morning";
+      expect(instance.hourMapKey(6)).toBe(-1);
+    });
   });
 
   describe("randomKudoIndex", () => {
@@ -146,6 +161,21 @@ describe("MMM-kudos", () => {
       expect(instance.kudoArray()).toEqual([]);
     });
 
+    test("kudoArray - kudos that are no strings are skipped", () => {
+      instance.config.kudos = {
+        lunch: [42, "lunch kudo", null, { text: "x" }, ["nested"]],
+        anytime: [true, "anytime kudo"],
+      };
+
+      expect(instance.kudoArray()).toEqual(["lunch kudo", "anytime kudo"]);
+    });
+
+    test.each([null, undefined, "not an object", 5])("kudoArray - kudos %p gives no kudos", (kudos) => {
+      instance.config.kudos = kudos;
+
+      expect(instance.kudoArray()).toEqual([]);
+    });
+
     test("kudoArray - invalid regex keys are skipped and logged once", () => {
       instance.config.kudos = {
         "(birthday": ["never matches"],
@@ -186,6 +216,28 @@ describe("MMM-kudos", () => {
     test("getRandomKudo - sequential mode returns empty string for no kudos", () => {
       instance.config.random = false;
       expect(instance.getRandomKudo()).toBe("");
+    });
+
+    test("getRandomKudo - sequential mode starts over after the last kudo", () => {
+      instance.config.random = false;
+      instance.config.kudos = { anytime: ["one", "two", "three"] };
+
+      const shown = Array.from({ length: 7 }, () => instance.getRandomKudo());
+
+      expect(shown).toEqual(["one", "two", "three", "one", "two", "three", "one"]);
+    });
+
+    test("getRandomKudo - sequential mode continues when the list got shorter", () => {
+      instance.config.random = false;
+      instance.config.kudos = { anytime: ["one", "two", "three"] };
+      instance.getRandomKudo();
+      instance.getRandomKudo();
+      instance.getRandomKudo();
+
+      instance.config.kudos = { anytime: ["one", "two"] };
+
+      expect(instance.getRandomKudo()).toBe("one");
+      expect(instance.getRandomKudo()).toBe("two");
     });
   });
 
@@ -355,6 +407,25 @@ describe("MMM-kudos", () => {
       expect(intervalDelays()).toEqual([30000]);
       expect(refreshDelays()).toEqual([]);
       expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    test.each([undefined, ""])("start - remoteFile %p means no file", async (remoteFile) => {
+      instance.config.remoteFile = remoteFile;
+      instance.start();
+      await flushPromises();
+
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(Log.error).not.toHaveBeenCalled();
+    });
+
+    test.each([false, true, 42, { url: "kudos.json" }])("start - invalid remoteFile %p is ignored and logged", async (remoteFile) => {
+      instance.config.remoteFile = remoteFile;
+      instance.start();
+      await flushPromises();
+
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(refreshDelays()).toEqual([]);
+      expect(Log.error).toHaveBeenCalledWith(expect.stringContaining("invalid remoteFile"));
     });
 
     test("start - does not wait for the initial load", () => {
