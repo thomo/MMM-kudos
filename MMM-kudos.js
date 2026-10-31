@@ -179,12 +179,33 @@ Module.register("MMM-kudos", {
 
     // Add kudos for special days
     for (const entry in this.config.kudos) {
-      if (new RegExp(entry).test(date)) {
+      if (this.dateKeyMatches(entry, date)) {
         kudos.push(...this.kudoSet(entry));
       }
     }
 
     return kudos;
+  },
+
+  /**
+   * Test whether a kudos key, read as a regular expression, matches a date.
+   * Keys that are no valid regular expression never match; each of them is
+   * logged once.
+   * @param {string} key kudos key, e.g. "....-12-24"
+   * @param {string} date date formatted as YYYY-MM-DD
+   * @returns {boolean} true if the key matches the date
+   */
+  dateKeyMatches: function (key, date) {
+    try {
+      return new RegExp(key).test(date);
+    } catch (error) {
+      this.invalidDateKeys ??= new Set();
+      if (!this.invalidDateKeys.has(key)) {
+        this.invalidDateKeys.add(key);
+        Log.error(`${this.name}: ignoring kudos key "${key}" for date matching: ${error.message}`);
+      }
+      return false;
+    }
   },
 
   /**

@@ -143,6 +143,19 @@ describe("MMM-kudos", () => {
       expect(instance.kudoArray()).toEqual([]);
     });
 
+    test("kudoArray - invalid regex keys are skipped and logged once", () => {
+      instance.config.kudos = {
+        "(birthday": ["never matches"],
+        "anytime": ["anytime kudo"],
+        "....-10-31": ["halloween kudo"],
+      };
+
+      expect(instance.kudoArray()).toEqual(["anytime kudo", "halloween kudo"]);
+      expect(instance.kudoArray()).toEqual(["anytime kudo", "halloween kudo"]);
+      expect(Log.error).toHaveBeenCalledTimes(1);
+      expect(Log.error).toHaveBeenCalledWith(expect.stringContaining("(birthday"));
+    });
+
     test("kudoArray - does not mutate the configured sets", () => {
       instance.config.kudos = {
         lunch: ["lunch kudo"],

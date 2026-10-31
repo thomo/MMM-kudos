@@ -7,6 +7,7 @@
 - fix: refreshed `remoteFile` kudos are used from the next update on (previously one update later); random and sequential positions are reset when the kudos change
 - fix: kudo sets that are missing (e.g. a set named in `hourmap` but not defined in `remoteFile`) or are not arrays are treated as empty instead of crashing the module
 - fix: an empty kudo list no longer hangs the module in random mode
+- fix: kudos keys that are no valid regular expression (e.g. `"(birthday"`) are ignored for date matching and logged once, instead of crashing the module
 
 ## 1.0.3 - 2026-10-15
 
