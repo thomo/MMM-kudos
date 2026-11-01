@@ -65,6 +65,9 @@ Module.register("MMM-kudos", {
     }, updateDelay);
 
     if (this.hasRemoteFile()) {
+      // Show no kudo until remoteFile is loaded, instead of the configured
+      // or built-in kudos.
+      this.config.kudos = {};
       this.refreshDelay = this.remoteFileRefreshDelay();
       // Not awaited: MagicMirror waits for start() of all modules before it
       // renders anything, so a slow remoteFile must not block start().

@@ -10,6 +10,7 @@
 - change: `remoteFileRefreshInterval` and `updateInterval` accept numbers given as strings (e.g. `"30"`) again, as in 1.0.3
 - change (breaking): `remoteFileRefreshInterval` values `null`, `-1`, `true` and other non-numbers no longer fall back to a 15 minute refresh as in 1.0.3; the refresh is disabled and an error is logged
 - change: failed `remoteFile` loads are logged without query string, fragment and user info of the URL
+- change: with `remoteFile`, no kudo is shown until the file is loaded (before, the built-in default kudos were shown meanwhile and after a failed load)
 - change: `requiresVersion` raised to MagicMirror² 2.25.0, as already stated in the README
 
 ## 1.0.4 - 2026-10-31

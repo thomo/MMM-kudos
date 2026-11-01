@@ -577,8 +577,24 @@ describe("MMM-kudos", () => {
       expect(Log.error).toHaveBeenCalledWith(expect.stringContaining("remoteFileRefreshInterval"));
     });
 
-    test("start - failed initial load keeps defaults and still schedules timers", async () => {
-      const defaultKudos = instance.config.kudos;
+    test("start - no kudo is shown until remoteFile is loaded", async () => {
+      instance.config.hourmap = {};
+      instance.config.remoteFile = "kudos.json";
+      let answer;
+      global.fetch.mockReturnValue(new Promise((resolve) => {
+        answer = resolve;
+      }));
+
+      instance.start();
+      expect(instance.getRandomKudo()).toBe("");
+
+      answer(mockResponse(JSON.stringify(kudos)));
+      await flushPromises();
+      expect(instance.getRandomKudo()).toBe("remote kudo");
+    });
+
+    test("start - failed initial load shows no kudo and still schedules timers", async () => {
+      instance.config.hourmap = {};
       instance.config.remoteFile = "https://example.com/kudos.json";
       instance.config.remoteFileRefreshInterval = 1;
       global.fetch.mockRejectedValue(new TypeError("Failed to fetch"));
@@ -588,7 +604,7 @@ describe("MMM-kudos", () => {
 
       expect(intervalDelays()).toEqual([30000]);
       expect(refreshDelays()).toEqual([60 * 1000]);
-      expect(instance.config.kudos).toBe(defaultKudos);
+      expect(instance.getRandomKudo()).toBe("");
       expect(instance.updateDom).not.toHaveBeenCalled();
     });
 
