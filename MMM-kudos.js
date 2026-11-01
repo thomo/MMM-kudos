@@ -34,10 +34,11 @@ Module.register("MMM-kudos", {
     shrinkLimit: 35,
     updateInterval: 30000,
   },
-  lastIndexUsed: -1,
+  // index of the last shown kudo in the current kudo list
+  lastKudoIndex: -1,
   // Set currentweather from module
   currentWeatherType: "",
-  requiresVersion: "2.1.0", // Required version of MagicMirror
+  requiresVersion: "2.25.0", // Required version of MagicMirror
   // Largest delay setInterval/setTimeout can handle (2^31 - 1 ms, ~24.8 days);
   // larger values overflow and make the timer fire immediately.
   maxTimerDelay: 2147483647,
@@ -54,6 +55,8 @@ Module.register("MMM-kudos", {
     Log.info(`Starting module: ${this.name}`);
 
     this.lastKudoIndex = -1;
+    // set by the DOM_OBJECTS_CREATED notification after the first render
+    this.domCreated = false;
 
     const updateDelay = this.timerDelay("updateInterval", this.config.updateInterval, 1)
       ?? this.defaults.updateInterval;
@@ -91,13 +94,20 @@ Module.register("MMM-kudos", {
    * overlap and an older response can never overwrite a newer one. A failed
    * load (including the initial one) is retried by the next refresh.
    * @param {boolean} redraw whether to redraw immediately when the kudos
-   *   changed; otherwise they are shown with the next scheduled update
+   *   changed; otherwise they are shown with the next scheduled update.
+   *   Before the first render, the redraw waits for DOM_OBJECTS_CREATED:
+   *   MagicMirror calls getDom() also when there is no module DOM yet, so
+   *   an early redraw would use up a kudo nobody sees.
    * @returns {Promise<void>} resolved when the load is finished
    */
   reloadKudos: async function (redraw) {
     const kudos = await this.loadKudoFile();
     if (kudos && this.setKudos(kudos) && redraw) {
-      this.updateDom();
+      if (this.domCreated) {
+        this.updateDom();
+      } else {
+        this.redrawPending = true;
+      }
     }
     if (this.refreshDelay !== null) {
       setTimeout(() => this.reloadKudos(false), this.refreshDelay);
@@ -115,7 +125,6 @@ Module.register("MMM-kudos", {
       return false;
     }
     this.config.kudos = kudos;
-    this.lastIndexUsed = -1;
     this.lastKudoIndex = -1;
     return true;
   },
@@ -128,15 +137,28 @@ Module.register("MMM-kudos", {
    */
   remoteFileRefreshDelay: function () {
     const minutes = this.config.remoteFileRefreshInterval;
-    if (minutes === 0) {
+    if (this.configNumber(minutes) === 0) {
       return null;
     }
     return this.timerDelay("remoteFileRefreshInterval", minutes, 60 * 1000);
   },
 
   /**
+   * Read a configured number. Numbers given as strings (e.g. "30") are
+   * accepted, as 1.0.3 accepted them.
+   * @param {*} value configured value
+   * @returns {number} the number, or NaN if the value is no number
+   */
+  configNumber: function (value) {
+    if (typeof value === "string" && value.trim() !== "") {
+      return Number(value);
+    }
+    return typeof value === "number" ? value : NaN;
+  },
+
+  /**
    * Convert a configured timer interval to a delay usable by
-   * setInterval/setTimeout. Values that are not numbers, or whose delay is
+   * setInterval/setTimeout. Values that are no numbers (see `configNumber`), or whose delay is
    * below 1 ms or above `maxTimerDelay`, would make the timer fire in a tight
    * loop; they are rejected and logged.
    * @param {string} option name of the config option, for the log message
@@ -145,7 +167,8 @@ Module.register("MMM-kudos", {
    * @returns {number|null} delay in milliseconds, or null if invalid
    */
   timerDelay: function (option, value, unitMs) {
-    const delay = Number.isFinite(value) ? value * unitMs : NaN;
+    const number = this.configNumber(value);
+    const delay = Number.isFinite(number) ? number * unitMs : NaN;
     if (delay >= 1 && delay <= this.maxTimerDelay) {
       return delay;
     }
@@ -212,7 +235,9 @@ Module.register("MMM-kudos", {
   kudoArray: function () {
     const now = moment();
     const hour = now.hour();
-    const date = now.format("YYYY-MM-DD");
+    // English locale: other locales (e.g. "ar", set globally by the clock
+    // module) may format the date with other digits than 0-9
+    const date = now.clone().locale("en").format("YYYY-MM-DD");
     let kudos = [];
 
     const hourMapKey = this.hourMapKey(hour);
@@ -296,7 +321,7 @@ Module.register("MMM-kudos", {
       if (!response.ok) {
         throw new Error(`HTTP status ${response.status}`);
       }
-      const kudos = JSON.parse(await response.text());
+      const kudos = await response.json();
       if (kudos === null || typeof kudos !== "object" || Array.isArray(kudos)) {
         throw new Error("content is not a kudos object");
       }
@@ -305,8 +330,24 @@ Module.register("MMM-kudos", {
       const reason = error.name === "TimeoutError"
         ? `no response within ${this.remoteFileTimeout / 1000} s`
         : error.message;
-      Log.error(`${this.name}: failed to load remoteFile "${url}": ${reason}`);
+      Log.error(`${this.name}: failed to load remoteFile "${this.urlForLog(url)}": ${reason}`);
       return null;
+    }
+  },
+
+  /**
+   * Shorten a URL for logging to origin and path: query string, fragment
+   * and user info may hold access tokens or passwords.
+   * @param {string} url the URL or path
+   * @returns {string} the URL without query, fragment and user info
+   */
+  urlForLog: function (url) {
+    try {
+      const parsed = new URL(url);
+      return `${parsed.origin}${parsed.pathname}`;
+    } catch {
+      // no absolute URL, e.g. a path from this.file()
+      return url.replace(/[?#].*$/, "");
     }
   },
 
@@ -329,8 +370,8 @@ Module.register("MMM-kudos", {
         return "";
       }
       // continue with the next kudo, after the last one start over
-      index = this.lastIndexUsed + 1 < kudos.length ? this.lastIndexUsed + 1 : 0;
-      this.lastIndexUsed = index;
+      index = this.lastKudoIndex + 1 < kudos.length ? this.lastKudoIndex + 1 : 0;
+      this.lastKudoIndex = index;
     }
 
     return kudos[index] || "";
@@ -371,6 +412,12 @@ Module.register("MMM-kudos", {
   notificationReceived: function (notification, payload) {
     if (notification === "CURRENTWEATHER_TYPE") {
       this.currentWeatherType = payload.type;
+    } else if (notification === "DOM_OBJECTS_CREATED") {
+      this.domCreated = true;
+      if (this.redrawPending) {
+        this.redrawPending = false;
+        this.updateDom();
+      }
     }
   },
 });
