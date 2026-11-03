@@ -1,4 +1,4 @@
-## Unreleased
+## 2.0.0 - 2026-11-03
 
 - fix: sequential mode (`random: false`) no longer stays on the first kudo after one pass; it starts over with the first kudo after the last one
 - fix: kudos that are no strings (e.g. `42`, `null`) are skipped instead of crashing the module
