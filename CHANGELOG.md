@@ -6,7 +6,7 @@
 - fix: an `hourmap` without an integer hour key from 0 to 24 (e.g. `{ "05": "morning" }`) no longer hangs the module; no hour set is used then
 - fix: a `remoteFile` that is no string (e.g. `false`, `42`) is ignored and logged instead of crashing the module; `undefined` and `""` mean no file, like `null`
 - fix: date keys now also match when moment uses a locale with other digits than 0-9 (e.g. `ar`, `fa`, set globally by the clock module)
-- fix: when `remoteFile` is loaded before the mirror is first shown, the first kudo is no longer used up by an invisible redraw
+- fix: when `remoteFile` is loaded before the mirror is first shown, the first kudo is no longer used up by an extra redraw
 - change: `remoteFileRefreshInterval` and `updateInterval` accept numbers given as strings (e.g. `"30"`) again, as in 1.0.3
 - change (breaking): `remoteFileRefreshInterval` values `null`, `-1`, `true` and other non-numbers no longer fall back to a 15 minute refresh as in 1.0.3; the refresh is disabled and an error is logged
 - change: failed `remoteFile` loads are logged without query string, fragment and user info of the URL

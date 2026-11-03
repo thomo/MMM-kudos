@@ -100,7 +100,8 @@ Module.register("MMM-kudos", {
    *   changed; otherwise they are shown with the next scheduled update.
    *   Before the first render, the redraw waits for DOM_OBJECTS_CREATED:
    *   MagicMirror calls getDom() also when there is no module DOM yet, so
-   *   an early redraw would use up a kudo nobody sees.
+   *   an early redraw would use up a kudo nobody sees. If the first render
+   *   already shows the new kudos, no redraw follows (see `getRandomKudo`).
    * @returns {Promise<void>} resolved when the load is finished
    */
   reloadKudos: async function (redraw) {
@@ -330,9 +331,13 @@ Module.register("MMM-kudos", {
       }
       return kudos;
     } catch (error) {
-      const reason = error.name === "TimeoutError"
-        ? `no response within ${this.remoteFileTimeout / 1000} s`
-        : error.message;
+      let reason = error.message;
+      if (error.name === "TimeoutError") {
+        reason = `no response within ${this.remoteFileTimeout / 1000} s`;
+      } else if (error.name === "TypeError") {
+        // The message of a TypeError from fetch may contain the full URL.
+        reason = "request failed (network error or invalid URL)";
+      }
       Log.error(`${this.name}: failed to load remoteFile "${this.urlForLog(url)}": ${reason}`);
       return null;
     }
@@ -359,6 +364,8 @@ Module.register("MMM-kudos", {
    * @returns {string} a kudo
    */
   getRandomKudo: function () {
+    // this render shows the current kudos, a pending redraw is not needed anymore
+    this.redrawPending = false;
     // get the current time of day kudos list
     const kudos = this.kudoArray();
     // variable for index to next message to display

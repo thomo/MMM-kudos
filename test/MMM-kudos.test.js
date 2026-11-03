@@ -306,6 +306,18 @@ describe("MMM-kudos", () => {
       expect(Log.error).not.toHaveBeenCalledWith(expect.stringMatching(/secret|token/));
     });
 
+    test("loadKudoFile - does not log the URL contained in a fetch error message", async () => {
+      instance.config.remoteFile = "https://user:secret@example.com/kudos.json?token=abc";
+      global.fetch.mockRejectedValue(new TypeError(
+        "Request cannot be constructed from a URL that includes credentials: https://user:secret@example.com/kudos.json?token=abc"
+      ));
+
+      await instance.loadKudoFile();
+
+      expect(Log.error).toHaveBeenCalledTimes(1);
+      expect(Log.error).not.toHaveBeenCalledWith(expect.stringMatching(/secret|token/));
+    });
+
     test("loadKudoFile - returns null and logs when fetch rejects", async () => {
       instance.config.remoteFile = "https://example.com/kudos.json";
       global.fetch.mockRejectedValue(new TypeError("Failed to fetch"));
@@ -494,11 +506,24 @@ describe("MMM-kudos", () => {
       expect(instance.config.kudos).toEqual(kudos);
     });
 
-    test("start - a load finished before the first render redraws after it", async () => {
+    test("start - a load finished before the first render needs no redraw after it", async () => {
       instance.config.remoteFile = "kudos.json";
       global.fetch.mockResolvedValue(mockResponse(JSON.stringify(kudos)));
 
       instance.start();
+      await flushPromises();
+      instance.getRandomKudo();
+      instance.notificationReceived("DOM_OBJECTS_CREATED");
+
+      expect(instance.updateDom).not.toHaveBeenCalled();
+    });
+
+    test("start - a load finished during the first render redraws after it", async () => {
+      instance.config.remoteFile = "kudos.json";
+      global.fetch.mockResolvedValue(mockResponse(JSON.stringify(kudos)));
+
+      instance.start();
+      instance.getRandomKudo();
       await flushPromises();
       expect(instance.updateDom).not.toHaveBeenCalled();
 
