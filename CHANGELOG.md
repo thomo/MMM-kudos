@@ -1,3 +1,18 @@
+## 2.0.0 - 2026-11-03
+
+- fix: sequential mode (`random: false`) no longer stays on the first kudo after one pass; it starts over with the first kudo after the last one
+- fix: kudos that are no strings (e.g. `42`, `null`) are skipped instead of crashing the module
+- fix: `kudos` that is no object (e.g. `null`) no longer crashes the module on every update
+- fix: an `hourmap` without an integer hour key from 0 to 24 (e.g. `{ "05": "morning" }`) no longer hangs the module; no hour set is used then
+- fix: a `remoteFile` that is no string (e.g. `false`, `42`) is ignored and logged instead of crashing the module; `undefined` and `""` mean no file, like `null`
+- fix: date keys now also match when moment uses a locale with other digits than 0-9 (e.g. `ar`, `fa`, set globally by the clock module)
+- fix: when `remoteFile` is loaded before the mirror is first shown, the first kudo is no longer used up by an extra redraw
+- change: `remoteFileRefreshInterval` and `updateInterval` accept numbers given as strings (e.g. `"30"`) again, as in 1.0.3
+- change (breaking): `remoteFileRefreshInterval` values `null`, `-1`, `true` and other non-numbers no longer fall back to a 15 minute refresh as in 1.0.3; the refresh is disabled and an error is logged
+- change: failed `remoteFile` loads are logged without query string, fragment and user info of the URL
+- change: with `remoteFile`, no kudo is shown until the file is loaded (before, the built-in default kudos were shown meanwhile and after a failed load)
+- change: `requiresVersion` raised to MagicMirror² 2.25.0, as already stated in the README
+
 ## 1.0.4 - 2026-10-31
 
 - fix: add missing default `remoteFileRefreshInterval: 0`; without it the refresh timer got `NaN` as delay and re-fetched `remoteFile` in a tight loop, exhausting memory and crashing the renderer

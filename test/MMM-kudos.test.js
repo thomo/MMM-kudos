@@ -10,18 +10,29 @@ require("../MMM-kudos.js");
 const moduleInstance = Module.register.mock.calls[0][1];
 
 /**
- * Build a minimal fetch Response stand-in.
+ * Build a fetch Response.
  * @param {string} body response body
  * @param {object} [options] response options
- * @param {boolean} [options.ok] whether the response is successful
  * @param {number} [options.status] HTTP status code
- * @returns {object} object mimicking a fetch Response
+ * @returns {Response} the response
  */
-const mockResponse = (body, { ok = true, status = 200 } = {}) => ({
-  ok,
-  status,
-  text: jest.fn().mockResolvedValue(body),
-});
+const mockResponse = (body, { status = 200 } = {}) => new Response(body, { status });
+
+/**
+ * Let Math.random fail after some calls, so that a regressed endless retry
+ * loop fails the test instead of hanging the test run.
+ * @param {number} maxCalls calls answered with 0 before it throws
+ */
+const failRandomAfter = (maxCalls) => {
+  let calls = 0;
+  jest.spyOn(Math, "random").mockImplementation(() => {
+    calls += 1;
+    if (calls > maxCalls) {
+      throw new Error("endless loop");
+    }
+    return 0;
+  });
+};
 
 // Resolve pending promise chains (works with fake timers, uses the real setImmediate).
 const flushPromises = () => new Promise(jest.requireActual("timers").setImmediate);
@@ -44,6 +55,7 @@ describe("MMM-kudos", () => {
   });
 
   afterEach(() => {
+    jest.restoreAllMocks();
     jest.useRealTimers();
     delete global.fetch;
   });
@@ -80,6 +92,21 @@ describe("MMM-kudos", () => {
     test("hourMapKey - when hour when it is before first defined hour", () => {
       expect(instance.hourMapKey(3)).toBe(20);
     });
+
+    test("hourMapKey - key 24 is used before the first defined hour", () => {
+      instance.config.hourmap = { 5: "morning", 24: "night" };
+      expect(instance.hourMapKey(3)).toBe(24);
+    });
+
+    test("hourMapKey - returns -1 without hanging when no key is an hour 0-24", () => {
+      instance.config.hourmap = { "05": "morning", "morning": 5, "25": "never" };
+      expect(instance.hourMapKey(6)).toBe(-1);
+    });
+
+    test("hourMapKey - returns -1 when hourmap is not an object", () => {
+      instance.config.hourmap = "morning";
+      expect(instance.hourMapKey(6)).toBe(-1);
+    });
   });
 
   describe("randomKudoIndex", () => {
@@ -96,6 +123,7 @@ describe("MMM-kudos", () => {
     });
 
     test("randomKudoIndex - returns -1 for an empty array without hanging", () => {
+      failRandomAfter(100);
       instance.lastKudoIndex = 0;
       expect(instance.randomKudoIndex([])).toBe(-1);
     });
@@ -146,6 +174,21 @@ describe("MMM-kudos", () => {
       expect(instance.kudoArray()).toEqual([]);
     });
 
+    test("kudoArray - kudos that are no strings are skipped", () => {
+      instance.config.kudos = {
+        lunch: [42, "lunch kudo", null, { text: "x" }, ["nested"]],
+        anytime: [true, "anytime kudo"],
+      };
+
+      expect(instance.kudoArray()).toEqual(["lunch kudo", "anytime kudo"]);
+    });
+
+    test.each([null, undefined, "not an object", 5])("kudoArray - kudos %p gives no kudos", (kudos) => {
+      instance.config.kudos = kudos;
+
+      expect(instance.kudoArray()).toEqual([]);
+    });
+
     test("kudoArray - invalid regex keys are skipped and logged once", () => {
       instance.config.kudos = {
         "(birthday": ["never matches"],
@@ -157,6 +200,17 @@ describe("MMM-kudos", () => {
       expect(instance.kudoArray()).toEqual(["anytime kudo", "halloween kudo"]);
       expect(Log.error).toHaveBeenCalledTimes(1);
       expect(Log.error).toHaveBeenCalledWith(expect.stringContaining("(birthday"));
+    });
+
+    test("kudoArray - date keys match with locales using other digits", () => {
+      moment.locale("ar");
+      try {
+        instance.config.kudos = { "....-10-31": ["halloween kudo"] };
+
+        expect(instance.kudoArray()).toEqual(["halloween kudo"]);
+      } finally {
+        moment.locale("en");
+      }
     });
 
     test("kudoArray - does not mutate the configured sets", () => {
@@ -178,6 +232,7 @@ describe("MMM-kudos", () => {
     });
 
     test("getRandomKudo - random mode returns empty string for no kudos", () => {
+      failRandomAfter(100);
       instance.config.random = true;
       instance.lastKudoIndex = 0;
       expect(instance.getRandomKudo()).toBe("");
@@ -186,6 +241,28 @@ describe("MMM-kudos", () => {
     test("getRandomKudo - sequential mode returns empty string for no kudos", () => {
       instance.config.random = false;
       expect(instance.getRandomKudo()).toBe("");
+    });
+
+    test("getRandomKudo - sequential mode starts over after the last kudo", () => {
+      instance.config.random = false;
+      instance.config.kudos = { anytime: ["one", "two", "three"] };
+
+      const shown = Array.from({ length: 7 }, () => instance.getRandomKudo());
+
+      expect(shown).toEqual(["one", "two", "three", "one", "two", "three", "one"]);
+    });
+
+    test("getRandomKudo - sequential mode continues when the list got shorter", () => {
+      instance.config.random = false;
+      instance.config.kudos = { anytime: ["one", "two", "three"] };
+      instance.getRandomKudo();
+      instance.getRandomKudo();
+      instance.getRandomKudo();
+
+      instance.config.kudos = { anytime: ["one", "two"] };
+
+      expect(instance.getRandomKudo()).toBe("one");
+      expect(instance.getRandomKudo()).toBe("two");
     });
   });
 
@@ -216,6 +293,31 @@ describe("MMM-kudos", () => {
       );
     });
 
+    test.each([
+      ["https://user:secret@example.com/kudos.json?token=abc#x", "https://example.com/kudos.json"],
+      ["kudos.json?token=abc", "modules/MMM-kudos/kudos.json"],
+    ])("loadKudoFile - logs %p without query, fragment and user info", async (remoteFile, logged) => {
+      instance.config.remoteFile = remoteFile;
+      global.fetch.mockRejectedValue(new TypeError("Failed to fetch"));
+
+      await instance.loadKudoFile();
+
+      expect(Log.error).toHaveBeenCalledWith(expect.stringContaining(`"${logged}"`));
+      expect(Log.error).not.toHaveBeenCalledWith(expect.stringMatching(/secret|token/));
+    });
+
+    test("loadKudoFile - does not log the URL contained in a fetch error message", async () => {
+      instance.config.remoteFile = "https://user:secret@example.com/kudos.json?token=abc";
+      global.fetch.mockRejectedValue(new TypeError(
+        "Request cannot be constructed from a URL that includes credentials: https://user:secret@example.com/kudos.json?token=abc"
+      ));
+
+      await instance.loadKudoFile();
+
+      expect(Log.error).toHaveBeenCalledTimes(1);
+      expect(Log.error).not.toHaveBeenCalledWith(expect.stringMatching(/secret|token/));
+    });
+
     test("loadKudoFile - returns null and logs when fetch rejects", async () => {
       instance.config.remoteFile = "https://example.com/kudos.json";
       global.fetch.mockRejectedValue(new TypeError("Failed to fetch"));
@@ -239,7 +341,7 @@ describe("MMM-kudos", () => {
     test("loadKudoFile - returns null and logs on HTTP error status", async () => {
       instance.config.remoteFile = "https://example.com/kudos.json";
       global.fetch.mockResolvedValue(
-        mockResponse("<html>Not Found</html>", { ok: false, status: 404 })
+        mockResponse("<html>Not Found</html>", { status: 404 })
       );
 
       await expect(instance.loadKudoFile()).resolves.toBeNull();
@@ -270,6 +372,9 @@ describe("MMM-kudos", () => {
       [2147483647, 1, 2147483647],
       [15, 60 * 1000, 15 * 60 * 1000],
       [0.5, 60 * 1000, 30 * 1000],
+      // numbers as strings, as accepted by 1.0.3
+      ["1000", 1, 1000],
+      [" 0.5 ", 60 * 1000, 30 * 1000],
     ])("timerDelay - %p with unit %p ms gives %p ms", (value, unitMs, expected) => {
       expect(instance.timerDelay("option", value, unitMs)).toBe(expected);
       expect(Log.error).not.toHaveBeenCalled();
@@ -286,7 +391,10 @@ describe("MMM-kudos", () => {
       [1e306, 60 * 1000],
       [NaN, 1],
       [Infinity, 1],
-      ["1000", 1],
+      ["1000ms", 1],
+      ["", 1],
+      ["  ", 1],
+      [true, 1],
       [null, 1],
       [undefined, 1],
       [{}, 1],
@@ -298,8 +406,8 @@ describe("MMM-kudos", () => {
   });
 
   describe("remoteFileRefreshDelay", () => {
-    test("remoteFileRefreshDelay - 0 means no refresh", () => {
-      instance.config.remoteFileRefreshInterval = 0;
+    test.each([0, "0"])("remoteFileRefreshDelay - %p means no refresh", (value) => {
+      instance.config.remoteFileRefreshInterval = value;
       expect(instance.remoteFileRefreshDelay()).toBeNull();
       expect(Log.error).not.toHaveBeenCalled();
     });
@@ -309,6 +417,7 @@ describe("MMM-kudos", () => {
       [1, 60 * 1000],
       [0.5, 30 * 1000],
       [35791, 35791 * 60 * 1000],
+      ["30", 30 * 60 * 1000],
     ])("remoteFileRefreshDelay - %p minutes are used as is (no minimum)", (minutes, expected) => {
       instance.config.remoteFileRefreshInterval = minutes;
       expect(instance.remoteFileRefreshDelay()).toBe(expected);
@@ -316,7 +425,6 @@ describe("MMM-kudos", () => {
 
     test.each([
       ["30min"],
-      ["30"],
       [undefined],
       [null],
       [-5],
@@ -357,6 +465,25 @@ describe("MMM-kudos", () => {
       expect(global.fetch).not.toHaveBeenCalled();
     });
 
+    test.each([undefined, ""])("start - remoteFile %p means no file", async (remoteFile) => {
+      instance.config.remoteFile = remoteFile;
+      instance.start();
+      await flushPromises();
+
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(Log.error).not.toHaveBeenCalled();
+    });
+
+    test.each([false, true, 42, { url: "kudos.json" }])("start - invalid remoteFile %p is ignored and logged", async (remoteFile) => {
+      instance.config.remoteFile = remoteFile;
+      instance.start();
+      await flushPromises();
+
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(refreshDelays()).toEqual([]);
+      expect(Log.error).toHaveBeenCalledWith(expect.stringContaining("invalid remoteFile"));
+    });
+
     test("start - does not wait for the initial load", () => {
       instance.config.remoteFile = "https://example.com/kudos.json";
       global.fetch.mockReturnValue(new Promise(() => {})); // never answers
@@ -377,6 +504,45 @@ describe("MMM-kudos", () => {
       expect(intervalDelays()).toEqual([30000]);
       expect(refreshDelays()).toEqual([]);
       expect(instance.config.kudos).toEqual(kudos);
+    });
+
+    test("start - a load finished before the first render needs no redraw after it", async () => {
+      instance.config.remoteFile = "kudos.json";
+      global.fetch.mockResolvedValue(mockResponse(JSON.stringify(kudos)));
+
+      instance.start();
+      await flushPromises();
+      instance.getRandomKudo();
+      instance.notificationReceived("DOM_OBJECTS_CREATED");
+
+      expect(instance.updateDom).not.toHaveBeenCalled();
+    });
+
+    test("start - a load finished during the first render redraws after it", async () => {
+      instance.config.remoteFile = "kudos.json";
+      global.fetch.mockResolvedValue(mockResponse(JSON.stringify(kudos)));
+
+      instance.start();
+      instance.getRandomKudo();
+      await flushPromises();
+      expect(instance.updateDom).not.toHaveBeenCalled();
+
+      instance.notificationReceived("DOM_OBJECTS_CREATED");
+      expect(instance.updateDom).toHaveBeenCalledTimes(1);
+
+      instance.notificationReceived("DOM_OBJECTS_CREATED");
+      expect(instance.updateDom).toHaveBeenCalledTimes(1);
+    });
+
+    test("start - a load finished after the first render redraws immediately", async () => {
+      instance.config.remoteFile = "kudos.json";
+      global.fetch.mockResolvedValue(mockResponse(JSON.stringify(kudos)));
+
+      instance.start();
+      instance.notificationReceived("DOM_OBJECTS_CREATED");
+      expect(instance.updateDom).not.toHaveBeenCalled();
+      await flushPromises();
+
       expect(instance.updateDom).toHaveBeenCalledTimes(1);
     });
 
@@ -436,8 +602,24 @@ describe("MMM-kudos", () => {
       expect(Log.error).toHaveBeenCalledWith(expect.stringContaining("remoteFileRefreshInterval"));
     });
 
-    test("start - failed initial load keeps defaults and still schedules timers", async () => {
-      const defaultKudos = instance.config.kudos;
+    test("start - no kudo is shown until remoteFile is loaded", async () => {
+      instance.config.hourmap = {};
+      instance.config.remoteFile = "kudos.json";
+      let answer;
+      global.fetch.mockReturnValue(new Promise((resolve) => {
+        answer = resolve;
+      }));
+
+      instance.start();
+      expect(instance.getRandomKudo()).toBe("");
+
+      answer(mockResponse(JSON.stringify(kudos)));
+      await flushPromises();
+      expect(instance.getRandomKudo()).toBe("remote kudo");
+    });
+
+    test("start - failed initial load shows no kudo and still schedules timers", async () => {
+      instance.config.hourmap = {};
       instance.config.remoteFile = "https://example.com/kudos.json";
       instance.config.remoteFileRefreshInterval = 1;
       global.fetch.mockRejectedValue(new TypeError("Failed to fetch"));
@@ -447,7 +629,7 @@ describe("MMM-kudos", () => {
 
       expect(intervalDelays()).toEqual([30000]);
       expect(refreshDelays()).toEqual([60 * 1000]);
-      expect(instance.config.kudos).toBe(defaultKudos);
+      expect(instance.getRandomKudo()).toBe("");
       expect(instance.updateDom).not.toHaveBeenCalled();
     });
 
@@ -500,8 +682,8 @@ describe("MMM-kudos", () => {
       expect(Log.error).toHaveBeenCalledWith(expect.stringContaining("updateInterval"));
     });
 
-    test("start - valid updateInterval is used as is", () => {
-      instance.config.updateInterval = 1000;
+    test.each([1000, "1000"])("start - valid updateInterval %p is used as is", (value) => {
+      instance.config.updateInterval = value;
 
       instance.start();
 
@@ -512,26 +694,22 @@ describe("MMM-kudos", () => {
 
   describe("setKudos", () => {
     test("setKudos - replaces changed kudos and resets positions", () => {
-      instance.lastIndexUsed = 3;
       instance.lastKudoIndex = 2;
       const kudos = { anytime: ["new kudo"] };
 
       expect(instance.setKudos(kudos)).toBe(true);
 
       expect(instance.config.kudos).toBe(kudos);
-      expect(instance.lastIndexUsed).toBe(-1);
       expect(instance.lastKudoIndex).toBe(-1);
     });
 
     test("setKudos - keeps kudos and positions when content is unchanged", () => {
       const current = instance.config.kudos;
-      instance.lastIndexUsed = 3;
       instance.lastKudoIndex = 2;
 
       expect(instance.setKudos(JSON.parse(JSON.stringify(current)))).toBe(false);
 
       expect(instance.config.kudos).toBe(current);
-      expect(instance.lastIndexUsed).toBe(3);
       expect(instance.lastKudoIndex).toBe(2);
     });
   });
